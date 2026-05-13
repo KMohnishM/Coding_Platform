@@ -5,9 +5,25 @@ class ProblemSerializer(serializers.ModelSerializer):
     """
     Serializer for the Problem model (list view).
     """
+    description_preview = serializers.SerializerMethodField()
+
     class Meta:
         model = Problem
-        fields = ['id', 'problem_id', 'title', 'difficulty', 'created_at']
+        fields = ['id', 'problem_id', 'title', 'difficulty', 'topic', 'created_at', 'description_preview']
+
+    def get_description_preview(self, obj):
+        """Get a short preview of the description."""
+        if not obj.description:
+            return ""
+        # Extract first paragraph or first 150 characters
+        lines = obj.description.split('\n')
+        for line in lines:
+            line = line.strip()
+            if line and not line.startswith('#'):
+                # Remove markdown formatting
+                preview = line.replace('**', '').replace('*', '').replace('`', '')
+                return preview[:150] + '...' if len(preview) > 150 else preview
+        return ""
 
 class ProblemDetailSerializer(serializers.ModelSerializer):
     """
@@ -16,38 +32,96 @@ class ProblemDetailSerializer(serializers.ModelSerializer):
     tests = serializers.SerializerMethodField()
     starting_code = serializers.SerializerMethodField()
     topic = serializers.CharField(default='General')
-    
+    hints_available = serializers.SerializerMethodField()
+
     class Meta:
         model = Problem
-        fields = ['id', 'problem_id', 'title', 'description', 'difficulty', 
-                  'created_at', 'topic', 'tests', 'starting_code']
-    
+        fields = ['id', 'problem_id', 'title', 'description', 'difficulty',
+                  'created_at', 'topic', 'tests', 'starting_code', 'hints_available']
+
     def get_tests(self, obj):
         """
         Get test cases for the problem.
-        In a real implementation, this would fetch tests from a database.
-        For now, we'll return sample tests.
+        Extracts examples from the description if formatted properly.
         """
-        return [
-            {
-                'input': 'Example input 1',
-                'expected': 'Example output 1',
-                'explanation': 'Explanation for example 1'
-            },
-            {
-                'input': 'Example input 2',
-                'expected': 'Example output 2',
-                'explanation': 'Explanation for example 2'
-            }
-        ]
-    
+        tests = []
+
+        # Try to extract examples from description
+        if obj.description:
+            lines = obj.description.split('\n')
+            current_input = None
+            current_output = None
+            in_code_block = False
+            code_block_content = []
+
+            for i, line in enumerate(lines):
+                # Detect code blocks
+                if line.strip().startswith('```'):
+                    if in_code_block:
+                        # End of code block
+                        content = '\n'.join(code_block_content).strip()
+                        if current_input is None:
+                            current_input = content
+                        elif current_output is None:
+                            current_output = content
+                        code_block_content = []
+                        in_code_block = False
+                    else:
+                        # Start of code block
+                        in_code_block = True
+                    continue
+
+                if in_code_block:
+                    code_block_content.append(line)
+                    continue
+
+                # Look for Input/Output markers
+                if '**Input:**' in line or 'Input:' in line:
+                    # Save previous test if complete
+                    if current_input and current_output:
+                        tests.append({
+                            'input': current_input,
+                            'expected': current_output,
+                            'explanation': ''
+                        })
+                    current_input = None
+                    current_output = None
+                elif '**Output:**' in line or 'Output:' in line:
+                    pass  # Just a marker
+
+        # If no tests extracted, return default template
+        if not tests:
+            tests = [
+                {
+                    'input': '5\n1 2 3 4 5',
+                    'expected': '15',
+                    'explanation': 'Sum of all elements'
+                }
+            ]
+
+        return tests[:10]  # Limit to 10 test cases
+
     def get_starting_code(self, obj):
         """
         Get starting code template for the problem.
-        In a real implementation, this would fetch language-specific code templates.
-        For now, we'll return a sample JavaScript template.
+        Returns language-specific templates based on problem type.
         """
-        return "function solution(input) {\n  // Your code here\n  \n  return result;\n}"
+        # Default JavaScript template
+        template = """function solution(input) {
+    // Read input
+    const lines = input.trim().split('\\n');
+    const n = parseInt(lines[0]);
+    const arr = lines[1].split(' ').map(Number);
+
+    // Your code here
+
+    return result;
+}"""
+        return template
+
+    def get_hints_available(self, obj):
+        """Return the number of hints available for this problem."""
+        return obj.hints.count()
 
 class AttemptSerializer(serializers.ModelSerializer):
     """

@@ -8,7 +8,7 @@ import logging
 import json
 
 from .models import Problem, Hint, Attempt, HintDelivery, HintEvaluation, UserProgress
-from .hint_chain import HintChain
+from .orchestrator import AgentOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ class HintViewSet(viewsets.ViewSet):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         logger.info("🚀 Initializing HintViewSet...")
-        self.hint_chain = HintChain()
+        self.orchestrator = AgentOrchestrator()
         logger.info("✅ HintViewSet initialized successfully")
 
     def _get_or_create_problem(self, problem_id, problem_data=None):
@@ -92,7 +92,7 @@ class HintViewSet(viewsets.ViewSet):
         logger.info(f"📝 Creating attempt record for user {user_id} on problem {problem.id}")
         
         # Evaluate the attempt
-        attempt_evaluation = self.hint_chain.evaluate_attempt_only(
+        attempt_evaluation = self.orchestrator.evaluate_attempt(
             problem_description=problem.description,
             user_code=user_code
         )
@@ -183,9 +183,15 @@ class HintViewSet(viewsets.ViewSet):
             "problem_id": problem.id
         }
 
-        # Run the full workflow chain
-        logger.info("🔄 Running HintChain workflow...")
-        result = self.hint_chain.process_hint_request(chain_input)
+        # Run the full agentic loop
+        logger.info("🔄 Running Agentic Orchestrator workflow...")
+        result = self.orchestrator.generate_adaptive_hint(
+            problem_description=problem.description,
+            user_code=user_code,
+            hint_level=progress.current_hint_level,
+            failed_attempts=progress.failed_attempts_count,
+            previous_hints=previous_hints_text
+        )
 
         # Get updated hint level and type from the chain result
         new_hint_level = result.get('updated_hint_level', progress.current_hint_level)
@@ -345,9 +351,15 @@ class HintViewSet(viewsets.ViewSet):
                 "hint_type": "conceptual"
             }
 
-            # Run the full workflow chain for auto-trigger
-            logger.info("🔄 Running auto-trigger workflow...")
-            result = self.hint_chain.process_hint_request(chain_input)
+            # Run the full agentic loop for auto-trigger
+            logger.info("🔄 Running Agentic auto-trigger workflow...")
+            result = self.orchestrator.generate_adaptive_hint(
+                problem_description=problem.description,
+                user_code=user_code,
+                hint_level=progress.current_hint_level,
+                failed_attempts=progress.failed_attempts_count,
+                previous_hints=previous_hints_text
+            )
 
             # Check for duplicate hint (avoid delivering same hint as last time)
             if previous_hints_text and result['generated_hint'].strip() == previous_hints_text[0].strip():

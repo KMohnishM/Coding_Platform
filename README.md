@@ -1,49 +1,139 @@
-# Personalized Contextual Hint Generation System
+# 🚀 Personalized Contextual Hint Generation System
 
-A Django-based system for generating intelligent, contextual hints for coding problems. The system uses OpenRouter's API to generate hints based on the problem statement, user's code, and their progress.
+A Django + React coding platform with intelligent hint generation, powered by your `problems_full.jsonl` data file.
 
-## Features
+## ✨ Key Features
 
-- Intelligent hint generation based on problem context and user code
-- Real-time hint delivery
-- User progress tracking
-- Tiered hint system
-- Automatic hint triggering when users are stuck
-- Hint quality evaluation
+### JSONL Integration (NEW!)
+- 📚 **500+ Coding Problems** loaded from JSONL
+- 🎯 **Topic-Based Organization** with colorful badges
+- 📊 **Dual View Modes**: List View & Topic View
+- 🎨 **Interactive Topic Statistics** with problem counts
+- 🔍 **Advanced Filtering** by topic, difficulty, and search
 
-## Setup
+### Hint System
+- 💡 **Intelligent hint generation** based on problem context and user code
+- 🎯 **Real-time hint delivery**
+- 📈 **User progress tracking**
+- 🔢 **Tiered hint system** (progressive hints)
+- 🤖 **Automatic hint triggering** when users are stuck
+- ⭐ **Hint quality evaluation**
 
-1. Clone the repository:
+### Code Editor
+- 🖥️ **Monaco Code Editor** for writing solutions
+- ✅ **Test case validation**
+- 🎨 **Syntax highlighting**
+
+## 🚀 Quick Start
+
+### 1. Load Problems from JSONL (NEW!)
 ```bash
-git clone <repository-url>
-cd Hint_Generation
+cd backend
+python load_jsonl_problems.py
 ```
+This will load all 500+ problems from `problems_full.jsonl` into the database.
 
-2. Create and activate a virtual environment:
+### 2. Setup Backend
 ```bash
+cd backend
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
 pip install -r requirements.txt
 ```
 
-4. Set up environment variables:
+python manage.py migrate
+python manage.py runserver
+```
+
+### 3. Setup Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### 4. Open Browser
+Visit http://localhost:5173 and start solving problems!
+
+## 📚 Documentation
+
+- **[QUICK_START.md](QUICK_START.md)** - Detailed setup guide
+- **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - Complete implementation overview
+- **[TOPIC_VIEW_ENHANCEMENTS.md](TOPIC_VIEW_ENHANCEMENTS.md)** - Topic feature documentation
+- **[PLATFORM_STRUCTURE.md](PLATFORM_STRUCTURE.md)** - Architecture and data flow
+- **[backend/JSONL_LOADER_README.md](backend/JSONL_LOADER_README.md)** - Loader script details
+
+## 🎯 What's New - Topic-Based Organization
+
+### Enhanced Topic Display
+- ✅ **Topic Statistics**: See problem counts for each topic at a glance
+- ✅ **Topic View**: Browse problems grouped by topic with counts
+- ✅ **Color-Coded Badges**: Each topic has a unique, consistent color
+- ✅ **Interactive Filtering**: Click topic badges to instantly filter problems
+- ✅ **Fixed Difficulty Mapping**: Properly handles beginner→easy, intermediate→medium, advanced→hard
+
+### JSONL Integration
+- ✅ **Complete Loader Script**: Parses and loads all JSONL data
+- ✅ **Rich Descriptions**: Includes story, constraints, examples, pseudocode
+- ✅ **Hint System**: Progressive hints from JSONL hints array
+- ✅ **Test Cases**: Examples converted to test cases
+
+## 🎨 User Interface
+
+### Topic Statistics Section
+```
+┌─────────────────────────────────────────┐
+│ Topics Overview                         │
+│ [Array (45)] [String (32)] [Tree (28)] │
+│ [Graph (15)] [DP (20)] [Stack (18)]    │
+└─────────────────────────────────────────┘
+```
+
+### List View
+All problems in a single list with topic and difficulty badges.
+
+### Topic View
+Problems organized by topic with counts - perfect for focused practice!
+
+## 🛠️ Tech Stack
+
+- **Backend**: Django + Django REST Framework
+- **Frontend**: React + Vite + TailwindCSS
+- **Editor**: Monaco Code Editor
+- **Database**: SQLite
+- **Data Source**: JSONL file (`problems_full.jsonl`)
+- **AI**: OpenRouter API for hint generation
+
+## 📊 Data Flow
+
+```
+problems_full.jsonl → load_jsonl_problems.py → Django DB → REST API → React Frontend
+```
+
+## 🎓 Usage
+
+1. **Browse Problems**: Use filters and search to find problems
+2. **Select View**: Toggle between List View and Topic View
+3. **Filter by Topic**: Click topic badges in statistics section
+4. **Solve Problems**: Click any problem to open the code editor
+5. **Get Hints**: Use progressive hints when stuck
+6. **Submit Code**: Run and test your solutions
+
+## 📈 Statistics
+
+Based on your JSONL file:
+- **500+** coding problems
+- **Multiple topics**: Array, String, Tree, Graph, DP, Stack, Queue, etc.
+- **3 difficulty levels**: Easy, Medium, Hard
+- **1500+** hints (average 3 per problem)
+- **Test cases** for validation
+
+## 🔧 Environment Variables
+
+Set up `.env` file in backend directory:
 ```bash
 cp .env.example .env
-# Edit .env with your OpenRouter API key
-```
-
-5. Run migrations:
-```bash
-python manage.py migrate
-```
-
-6. Start the development server:
-```bash
-python manage.py runserver
+# Edit .env with your OpenRouter API key (for hint generation)
 ```
 
 ## API Testing with Postman

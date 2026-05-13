@@ -12,7 +12,7 @@ class Problem(models.Model):
     
     id = models.AutoField(primary_key=True)
     title = models.CharField(max_length=200)
-    problem_id = models.CharField(max_length=50, unique=True, null=True, blank=True)  # User-provided problem ID
+    problem_id = models.CharField(max_length=255, unique=True, null=True, blank=True)  # User-provided problem ID
     description = models.TextField()
     difficulty = models.CharField(max_length=10, choices=DIFFICULTY_CHOICES, default='medium')
     topic = models.CharField(max_length=100, default='General', blank=True)  # Added topic field
