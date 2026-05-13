@@ -53,4 +53,11 @@ coverage.xml
 
 # Unit test / coverage reports
 .pytest_cache/ 
-.vercel
+# Data Files
+*.jsonl
+backend/problems_full.jsonl
+backend/curated_problems_1k.jsonl
+
+# Node
+node_modules/
+frontend/node_modules/
