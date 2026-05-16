@@ -1,3 +1,5 @@
+// This is a temporary mock file to allow the frontend to build and run locally.
+// This data will be replaced by the curated problems loaded from the backend API.
 const problems = [
   {
     id: 1,
