@@ -9,6 +9,7 @@ import json
 
 from .models import Problem, Hint, Attempt, HintDelivery, HintEvaluation, UserProgress
 from .orchestrator import AgentOrchestrator
+from .hint_chain import HintChain
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,7 @@ class HintViewSet(viewsets.ViewSet):
         super().__init__(**kwargs)
         logger.info("🚀 Initializing HintViewSet...")
         self.orchestrator = AgentOrchestrator()
+        self.hint_chain = HintChain()
         logger.info("✅ HintViewSet initialized successfully")
 
     def _get_or_create_problem(self, problem_id, problem_data=None):
