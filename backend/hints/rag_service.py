@@ -257,8 +257,15 @@ class RAGService:
                 if SKLEARN_AVAILABLE and cosine_similarity:
                     similarity = cosine_similarity([current_embedding], [problem_embedding])[0][0]
                 else:
-                    # Fallback: simple hash-based similarity
-                    similarity = 1.0 - abs(hash(str(current_embedding)) - hash(str(problem_embedding))) / 1000
+                    # Fallback: token-based Jaccard similarity (more stable and deterministic than hash-based)
+                    curr_text = current_problem.title + " " + current_problem.description
+                    prob_text = problem.title + " " + problem.description
+                    curr_tokens = set(self._preprocess_text(curr_text).split())
+                    prob_tokens = set(self._preprocess_text(prob_text).split())
+                    if not curr_tokens or not prob_tokens:
+                        similarity = 0.0
+                    else:
+                        similarity = len(curr_tokens.intersection(prob_tokens)) / len(curr_tokens.union(prob_tokens))
                 similarities.append((problem, similarity))
                 logger.debug(f"   - Similarity with {problem.title}: {similarity:.3f}")
             except Exception as e:
