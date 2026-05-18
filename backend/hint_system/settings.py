@@ -82,6 +82,14 @@ DATABASES = {
     )
 }
 
+# Use SQLite in-memory database for testing to avoid connection issues with Supabase PostgreSQL
+import sys
+if 'test' in sys.argv or 'test_coverage' in sys.argv:
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': ':memory:',
+    }
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
