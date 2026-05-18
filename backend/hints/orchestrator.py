@@ -28,6 +28,14 @@ class AgentOrchestrator:
         """
         logger.info("🎬 Starting Agentic Loop...")
         
+        # Validate input parameters to prevent agent failures on empty input
+        if not problem_description or not problem_description.strip():
+            logger.warning("⚠️ problem_description is empty; using default placeholder.")
+            problem_description = "Empty problem description."
+        if not user_code or not user_code.strip():
+            logger.warning("⚠️ user_code is empty; substituting empty string.")
+            user_code = ""
+        
         # 1. Analyze the attempt
         logger.info("🔍 Step 1: Analyzing Attempt...")
         diagnosis = self.analyzer.analyze(problem_description, user_code)
