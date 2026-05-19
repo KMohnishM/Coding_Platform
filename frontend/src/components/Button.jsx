@@ -47,8 +47,10 @@ const Button = ({
   // Full width class
   const fullWidthClass = isFullWidth ? 'w-full' : '';
 
+  const selectedVariantClass = variantClasses[variant] || variantClasses.primary;
+
   // Button class composition
-  const buttonClasses = `${baseClasses} ${sizeClasses[size]} ${variantClasses[variant]} ${fullWidthClass} ${className}`;
+  const buttonClasses = `${baseClasses} ${sizeClasses[size]} ${selectedVariantClass} ${fullWidthClass} ${className}`;
 
   return (
     <button
