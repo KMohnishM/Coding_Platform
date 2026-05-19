@@ -26,11 +26,14 @@ export default function Badge({
     lg: 'px-3 py-1 text-base',
   };
 
+  const normalizedVariant = typeof variant === 'string' ? variant.toLowerCase() : variant;
+  const variantClass = variants[normalizedVariant] || variants.default;
+
   return (
     <span
       className={clsx(
         'inline-flex items-center font-medium rounded-full',
-        variants[variant],
+        variantClass,
         sizes[size],
         className
       )}
