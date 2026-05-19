@@ -17,12 +17,21 @@ class ProblemSerializer(serializers.ModelSerializer):
             return ""
         # Extract first paragraph or first 150 characters
         lines = obj.description.split('\n')
+        fallback_line = ""
         for line in lines:
             line = line.strip()
-            if line and not line.startswith('#'):
-                # Remove markdown formatting
-                preview = line.replace('**', '').replace('*', '').replace('`', '')
-                return preview[:150] + '...' if len(preview) > 150 else preview
+            if line:
+                if not line.startswith('#'):
+                    # Remove markdown formatting
+                    preview = line.replace('**', '').replace('*', '').replace('`', '')
+                    return preview[:150] + '...' if len(preview) > 150 else preview
+                elif not fallback_line:
+                    # Capture stripped header as a fallback preview
+                    fallback_line = line.lstrip('#').strip()
+        
+        if fallback_line:
+            preview = fallback_line.replace('**', '').replace('*', '').replace('`', '')
+            return preview[:150] + '...' if len(preview) > 150 else preview
         return ""
 
 class ProblemDetailSerializer(serializers.ModelSerializer):
