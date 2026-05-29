@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
 import authService from '../services/authService'
 import Button from './Button'
 import Loader from './Loader'
@@ -7,6 +6,7 @@ import Loader from './Loader'
 export default function SignIn({ onSignIn }) {
   const [mode, setMode] = useState('login')
   const [formData, setFormData] = useState({
+    username: '',
     email: '',
     password: '',
     confirmPassword: ''
@@ -36,29 +36,36 @@ export default function SignIn({ onSignIn }) {
       return
     }
 
-    if (mode === 'register' && formData.password !== formData.confirmPassword) {
-      setGeneralError('Passwords do not match')
-      return
+    if (mode === 'register') {
+      if (!formData.username) {
+        setGeneralError('Username is required')
+        return
+      }
+      if (formData.password !== formData.confirmPassword) {
+        setGeneralError('Passwords do not match')
+        return
+      }
     }
     
     try {
       setIsSubmitting(true)
       setGeneralError('')
       
-      let userData
+      let responseData
       if (mode === 'login') {
-        // Login existing user
-        userData = await authService.login(formData.email, formData.password)
+        responseData = await authService.login(formData.email, formData.password)
       } else {
-        // Register new user
-        userData = await authService.register(formData.email, formData.password)
+        responseData = await authService.register(formData.username, formData.email, formData.password)
       }
       
-      // Store user data in localStorage
-      authService.setUser(userData)
+      // Store user and token
+      authService.setUser(responseData.user)
+      if (responseData.token) {
+        localStorage.setItem('token', responseData.token)
+      }
       
       // Call parent callback
-      onSignIn(userData)
+      onSignIn(responseData.user)
     } catch (err) {
       console.error('Authentication error:', err)
       setGeneralError(
@@ -70,20 +77,24 @@ export default function SignIn({ onSignIn }) {
   }
 
   return (
-    <div className="w-full max-w-md mx-auto">
-      <div className="bg-white shadow-xl rounded-2xl p-8 space-y-6">
+    <div className="relative w-full max-w-md mx-auto z-10">
+      {/* Background glowing decorations */}
+      <div className="absolute -top-16 -left-16 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -z-10 pointer-events-none"></div>
+      <div className="absolute -bottom-16 -right-16 w-64 h-64 bg-purple-600/10 rounded-full blur-3xl -z-10 pointer-events-none"></div>
+      
+      <div className="bg-[#0b0f19]/60 backdrop-blur-xl border border-gray-800/80 shadow-2xl rounded-2xl p-8 space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
-          <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4">
-            <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
+          <div className="mx-auto w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-indigo-500/20">
+            <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">CodeHint</h1>
-          <h2 className="text-xl font-semibold text-gray-800">
+          <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">HintSys</h1>
+          <h2 className="text-xl font-semibold text-slate-100">
             {mode === 'login' ? 'Welcome Back' : 'Create Account'}
           </h2>
-          <p className="text-gray-600">
+          <p className="text-sm text-slate-400">
             {mode === 'login' 
               ? 'Sign in to continue to your coding journey' 
               : 'Start your coding journey with personalized hints'}
@@ -92,18 +103,36 @@ export default function SignIn({ onSignIn }) {
         
         {/* Error Message */}
         {generalError && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-3">
-            <svg className="w-5 h-5 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center space-x-3 animate-fade-in">
+            <svg className="w-5 h-5 text-red-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
             </svg>
-            <span className="text-red-800 text-sm">{generalError}</span>
+            <span className="text-red-300 text-sm">{generalError}</span>
           </div>
         )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
+          {mode === 'register' && (
+            <div>
+              <label htmlFor="username" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                Username
+              </label>
+              <input
+                type="text"
+                id="username"
+                name="username"
+                value={formData.username}
+                onChange={handleChange}
+                className="w-full px-4 py-2.5 bg-[#030712]/60 border border-gray-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-all sm:text-sm"
+                placeholder="Choose a username"
+                required={mode === 'register'}
+              />
+            </div>
+          )}
+
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="email" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
               Email Address
             </label>
             <input
@@ -112,14 +141,14 @@ export default function SignIn({ onSignIn }) {
               name="email"
               value={formData.email}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-              placeholder="Enter your email"
+              className="w-full px-4 py-2.5 bg-[#030712]/60 border border-gray-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-all sm:text-sm"
+              placeholder="name@example.com"
               required
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="password" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
               Password
             </label>
             <div className="relative">
@@ -129,14 +158,14 @@ export default function SignIn({ onSignIn }) {
                 name="password"
                 value={formData.password}
                 onChange={handleChange}
-                className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                placeholder="Enter your password"
+                className="w-full px-4 py-2.5 pr-10 bg-[#030712]/60 border border-gray-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-all sm:text-sm"
+                placeholder="••••••••"
                 required
               />
               <button
                 type="button"
                 onClick={() => setPasswordVisible(!passwordVisible)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors"
               >
                 {passwordVisible ? (
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -154,7 +183,7 @@ export default function SignIn({ onSignIn }) {
 
           {mode === 'register' && (
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="confirmPassword" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
                 Confirm Password
               </label>
               <input
@@ -163,41 +192,43 @@ export default function SignIn({ onSignIn }) {
                 name="confirmPassword"
                 value={formData.confirmPassword}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                placeholder="Confirm your password"
-                required
+                className="w-full px-4 py-2.5 bg-[#030712]/60 border border-gray-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-all sm:text-sm"
+                placeholder="••••••••"
+                required={mode === 'register'}
               />
             </div>
           )}
 
-          <Button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSubmitting ? (
-              <div className="flex items-center justify-center space-x-2">
-                <Loader size="sm" />
-                <span>{mode === 'login' ? 'Signing In...' : 'Creating Account...'}</span>
-              </div>
-            ) : (
-              mode === 'login' ? 'Sign In' : 'Create Account'
-            )}
-          </Button>
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold py-2.5 px-4 rounded-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/10 hover:shadow-indigo-500/20 active:scale-[0.98]"
+            >
+              {isSubmitting ? (
+                <div className="flex items-center justify-center space-x-2">
+                  <Loader size="small" color="white" />
+                  <span>{mode === 'login' ? 'Signing In...' : 'Creating Account...'}</span>
+                </div>
+              ) : (
+                mode === 'login' ? 'Sign In' : 'Create Account'
+              )}
+            </button>
+          </div>
         </form>
 
         {/* Mode Toggle */}
-        <div className="text-center pt-4 border-t border-gray-200">
-          <p className="text-gray-600">
+        <div className="text-center pt-4 border-t border-gray-800/80">
+          <p className="text-sm text-slate-400">
             {mode === 'login' ? "Don't have an account?" : "Already have an account?"}
             <button
               type="button"
               onClick={() => {
                 setMode(mode === 'login' ? 'register' : 'login')
                 setGeneralError('')
-                setFormData({ email: '', password: '', confirmPassword: '' })
+                setFormData({ username: '', email: '', password: '', confirmPassword: '' })
               }}
-              className="ml-1 text-blue-600 hover:text-blue-800 font-medium transition-colors"
+              className="ml-1.5 text-indigo-400 hover:text-indigo-300 font-medium transition-colors focus:outline-none"
             >
               {mode === 'login' ? 'Sign up' : 'Sign in'}
             </button>

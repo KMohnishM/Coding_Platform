@@ -1,120 +1,174 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeftIcon, PlayIcon, CheckIcon, LightBulbIcon } from '@heroicons/react/24/outline';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import MonacoEditor from '../components/MonacoEditor';
 import problemService from '../services/problemService';
 import hintService from '../services/hintService';
 import codeService from '../services/codeService';
 
-// Helper function to determine the language for a problem
-const getLanguageForProblem = (problem) => {
-  if (!problem) return 'javascript';
-  // Default to JavaScript if no specific language is detected
-  return problem.language || 'javascript';
+const capitalizeFirst = (str) => {
+  if (!str) return '';
+  return str.charAt(0).toUpperCase() + str.slice(1);
 };
 
 export default function ProblemDetail({ user }) {
   const { id } = useParams();
   const navigate = useNavigate();
-  // Define refs at the top with other hooks to maintain consistent hook order
-  const splitPaneRef = useRef(null);
-  const resizeHandleRef = useRef(null);
-  
-  const [problem, setProblem] = useState(window.__openProblem || null)
-  const [code, setCode] = useState(problem ? problem.starting_code : '')
-  const [hints, setHints] = useState([])
-  const [loadingHint, setLoadingHint] = useState(false)
-  const [loadingProblem, setLoadingProblem] = useState(false)
-  const [error, setError] = useState(null)
-  const [loadingRun, setLoadingRun] = useState(false)
-  const [runResult, setRunResult] = useState(null)
-  const [running, setRunning] = useState(false)
-  const [results, setResults] = useState(null)
-  const [submittedResults, setSubmittedResults] = useState(null)
-  const [showNotification, setShowNotification] = useState(false)
-  const [notification, setNotification] = useState({ type: '', message: '' })
-  const [language, setLanguage] = useState(() => problem ? getLanguageForProblem(problem) : 'javascript')
 
-  // Subscribe to problem open events
+  // Refs for resizable split pane
+  const splitContainerRef = useRef(null);
+  const isResizing = useRef(false);
+
+  // States
+  const [problem, setProblem] = useState(null);
+  const [code, setCode] = useState('');
+  const [hints, setHints] = useState([]);
+  const [loadingHint, setLoadingHint] = useState(false);
+  const [loadingProblem, setLoadingProblem] = useState(true);
+  const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState('description'); // 'description', 'hints', 'submissions'
+  const [leftWidth, setLeftWidth] = useState(45); // percentage width for left panel
+  const [language, setLanguage] = useState('javascript');
+  const [editorCodes, setEditorCodes] = useState({}); // cached code per language: { javascript: '...', python: '...' }
+  const [runResult, setRunResult] = useState(null);
+  const [loadingRun, setLoadingRun] = useState(false);
+  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+  const [terminalTab, setTerminalTab] = useState('result'); // 'testcase', 'result'
+  const [hintRatings, setHintRatings] = useState({}); // { hintId: rating }
+  const [localSubmissions, setLocalSubmissions] = useState([]);
+  const [hoverStar, setHoverStar] = useState({}); // { hintId: starVal }
+
   useEffect(() => {
-    function onOpen(e){
-      const p = e.detail
-      setProblem(p)
-      setCode(p.starting_code || '')
-      setLanguage(getLanguageForProblem(p))
-      setHints([])
-      setResults(null)
-      setSubmittedResults(null)
-    }
-    
-    window.addEventListener('openProblem', onOpen)
-    return () => window.removeEventListener('openProblem', onOpen)
-  }, [])
-  
-  // Fetch problem if we have an ID but no problem
-  useEffect(() => {
-    if (id && !problem && !window.__openProblem) {
-      // Fetch the problem by ID from the API
-      const fetchProblemById = async () => {
-        try {
-          setLoadingProblem(true)
-          const data = await problemService.getProblemById(id)
-          setProblem(data)
-          setCode(data.starting_code || '')
-          setLanguage(getLanguageForProblem(data))
-          setError(null)
-        } catch (err) {
-          console.error('Error fetching problem:', err)
-          // Create a fallback problem based on the ID (just for demo)
-          const fallbackProblem = {
-            id: parseInt(id),
-            title: "Two Sum",
-            difficulty: "Easy",
-            topic: "Arrays",
-            description: "<h2>Two Sum</h2><p>Given an array of integers <code>nums</code> and an integer <code>target</code>, return indices of the two numbers such that they add up to <code>target</code>.</p><p>You may assume that each input would have exactly one solution, and you may not use the same element twice.</p><p>You can return the answer in any order.</p><h3>Example 1:</h3><pre>Input: nums = [2,7,11,15], target = 9<br>Output: [0,1]<br>Explanation: Because nums[0] + nums[1] == 9, we return [0, 1].</pre>",
-            starting_code: "function twoSum(nums, target) {\n    // Write your code here\n}",
-          }
-          setProblem(fallbackProblem)
-          setCode(fallbackProblem.starting_code || '')
-          setLanguage('javascript')
-          setError(null)
-        } finally {
-          setLoadingProblem(false)
-        }
-      }
-      
-      fetchProblemById()
-    }
-  }, [id, problem])
+    loadProblemDetails();
+    loadLocalSubmissions();
+  }, [id]);
 
-  // Fetch problem details when component mounts
-  useEffect(() => {
-    const fetchProblem = async () => {
-      try {
-        setLoadingProblem(true)
-        const data = await problemService.getProblemById(id)
-        setProblem(data)
-        setCode(data.starting_code || '')
-        setError(null)
-      } catch (err) {
-        console.error('Error fetching problem:', err)
-        setError('Failed to fetch problem details. Please try again.')
-      } finally {
-        setLoadingProblem(false)
-      }
-    }
-
-    if (id) {
-      fetchProblem()
-    }
-  }, [id])
-
-  // Function to request a hint
-  async function requestHint(){
-    if (!user || !problem) return
-    
+  const loadLocalSubmissions = () => {
     try {
-      setLoadingHint(true)
+      const stored = JSON.parse(localStorage.getItem(`submissions_${id}`) || '[]');
+      setLocalSubmissions(stored);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const saveLocalSubmission = (codeText, status, execTime, resultData) => {
+    try {
+      const newSub = {
+        code: codeText,
+        status,
+        executionTime: execTime,
+        timestamp: new Date().toISOString(),
+        language,
+        result: resultData
+      };
+      const updated = [newSub, ...localSubmissions];
+      setLocalSubmissions(updated);
+      localStorage.setItem(`submissions_${id}`, JSON.stringify(updated));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const loadProblemDetails = async () => {
+    try {
+      setLoadingProblem(true);
+      const data = await problemService.getProblemById(id);
+      setProblem(data);
+      const defaultLang = data.language || 'javascript';
+      setLanguage(defaultLang);
+      const initialCode = data.starting_code || getDefaultStartingCode(defaultLang, data.title);
+      setCode(initialCode);
+      setEditorCodes({ [defaultLang]: initialCode });
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching problem:', err);
+      setError('Problem details could not be loaded.');
+    } finally {
+      setLoadingProblem(false);
+    }
+  };
+
+  const getDefaultStartingCode = (lang, title) => {
+    const fnName = title ? title.toLowerCase().replace(/[^a-zA-Z0-9]/g, '') : 'solve';
+    switch (lang) {
+      case 'python':
+        return `def ${fnName}(self):\n    # Write your solution here\n    pass`;
+      case 'java':
+        return `class Solution {\n    public void ${fnName}() {\n        // Write your solution here\n    }\n}`;
+      case 'cpp':
+        return `class Solution {\npublic:\n    void ${fnName}() {\n        // Write your solution here\n    }\n};`;
+      default:
+        return `function ${fnName}() {\n    // Write your solution here\n}`;
+    }
+  };
+
+  // Resize handler — using useCallback to avoid stale closure references
+  const handleResize = useCallback((e) => {
+    if (!isResizing.current || !splitContainerRef.current) return;
+    const containerRect = splitContainerRef.current.getBoundingClientRect();
+    const newWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+    if (newWidth > 20 && newWidth < 80) {
+      setLeftWidth(newWidth);
+    }
+  }, []);
+
+  const stopResize = useCallback(() => {
+    isResizing.current = false;
+    document.removeEventListener('mousemove', handleResize);
+    document.removeEventListener('mouseup', stopResize);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }, [handleResize]);
+
+  const startResize = useCallback((e) => {
+    isResizing.current = true;
+    document.addEventListener('mousemove', handleResize);
+    document.addEventListener('mouseup', stopResize);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [handleResize, stopResize]);
+
+  // Handle language updates with template caching
+  const handleLanguageChange = (newLang) => {
+    // Cache current code
+    setEditorCodes(prev => ({
+      ...prev,
+      [language]: code
+    }));
+    
+    setLanguage(newLang);
+    
+    // Retrieve cached code or load default template
+    if (editorCodes[newLang]) {
+      setCode(editorCodes[newLang]);
+    } else {
+      const template = getDefaultStartingCode(newLang, problem?.title);
+      setCode(template);
+      setEditorCodes(prev => ({
+        ...prev,
+        [newLang]: template
+      }));
+    }
+  };
+
+  // Reset editor template
+  const handleResetCode = () => {
+    if (window.confirm("Reset editor to default code template? Any changes will be lost.")) {
+      const template = getDefaultStartingCode(language, problem?.title);
+      setCode(template);
+      setEditorCodes(prev => ({
+        ...prev,
+        [language]: template
+      }));
+    }
+  };
+
+  // Hint requesting
+  const requestHint = async () => {
+    if (!user || !problem) return;
+    setActiveTab('hints');
+    try {
+      setLoadingHint(true);
       const result = await hintService.requestHint(
         user.id,
         problem.problem_id || problem.id,
@@ -123,1216 +177,739 @@ export default function ProblemDetail({ user }) {
           title: problem.title,
           description: problem.description
         }
-      )
+      );
       
-      // Add the new hint to our hints array
       if (result && result.hint) {
-        const newHint = {
-          ...result.hint,
-          timestamp: new Date().toISOString()
-        }
-        setHints(prevHints => [newHint, ...prevHints])
+        setHints(prev => [result.hint, ...prev]);
       }
     } catch (err) {
-      console.error('Error requesting hint:', err)
-      // Add error hint
-      setHints(prevHints => [{
-        content: `Error: ${err.message || 'Failed to get hint'}`,
-        level: 'error',
-        timestamp: new Date().toISOString()
-      }, ...prevHints])
+      console.error(err);
     } finally {
-      setLoadingHint(false)
+      setLoadingHint(false);
     }
-  }
+  };
 
-  // Function to run code
-  async function runCode() {
-    if (!user || !problem) return
-    
+  // Submit Feedback on Hints
+  const handleRateHint = async (hintDeliveryId, rating) => {
     try {
-      setLoadingRun(true)
+      await hintService.provideFeedback(hintDeliveryId, `Rated ${rating} stars`, rating);
+      setHintRatings(prev => ({
+        ...prev,
+        [hintDeliveryId]: rating
+      }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Code runs
+  const runCode = async () => {
+    if (!user || !problem) return;
+    setIsTerminalOpen(true);
+    setTerminalTab('result');
+    try {
+      setLoadingRun(true);
       const result = await codeService.runCode(
         user.id,
         problem.problem_id || problem.id,
         code,
         language
-      )
-      setRunResult(result)
+      );
+      setRunResult(result);
+      saveLocalSubmission(code, result.success ? 'success' : 'failed', result.execution_time || '0.1s', result);
+      
+      if (result.success) {
+        const solvedList = JSON.parse(localStorage.getItem('solvedProblems') || '[]');
+        if (!solvedList.includes(problem.problem_id)) {
+          solvedList.push(problem.problem_id);
+          localStorage.setItem('solvedProblems', JSON.stringify(solvedList));
+        }
+      }
     } catch (err) {
-      console.error('Error running code:', err)
+      console.error(err);
       setRunResult({
         success: false,
-        errors: [{
-          message: err.message || 'Failed to run code',
-          line: 1
-        }]
-      })
+        errors: [{ message: err.message || 'Execution error.' }]
+      });
     } finally {
-      setLoadingRun(false)
+      setLoadingRun(false);
     }
-  }
+  };
 
-  // Function to submit solution
-  async function submitSolution() {
-    if (!user || !problem) return
-    
+  const submitSolution = async () => {
+    if (!user || !problem) return;
+    setIsTerminalOpen(true);
+    setTerminalTab('result');
     try {
-      setLoadingRun(true)
+      setLoadingRun(true);
       const result = await codeService.submitSolution(
         user.id,
         problem.problem_id || problem.id,
         code,
         language
-      )
+      );
       setRunResult({
         ...result,
         isSubmission: true
-      })
+      });
+      saveLocalSubmission(code, result.success ? 'success' : 'failed', result.execution_time || '0.2s', result);
+      
+      if (result.success) {
+        const solvedList = JSON.parse(localStorage.getItem('solvedProblems') || '[]');
+        if (!solvedList.includes(problem.problem_id)) {
+          solvedList.push(problem.problem_id);
+          localStorage.setItem('solvedProblems', JSON.stringify(solvedList));
+        }
+      }
     } catch (err) {
-      console.error('Error submitting solution:', err)
+      console.error(err);
       setRunResult({
         success: false,
-        errors: [{
-          message: err.message || 'Failed to submit solution',
-          line: 1
-        }],
+        errors: [{ message: err.message || 'Submission failed.' }],
         isSubmission: true
-      })
+      });
     } finally {
-      setLoadingRun(false)
-    }
-  }
-
-  // Loading state
-  if (loadingProblem) {
-    return <div className="container">Loading problem...</div>
-  }
-
-  // Error state
-  if (error || !problem) {
-    return <div className="container error">{error || 'Problem not found'}</div>
-  }
-  
-  // Loading state
-  if (loadingProblem) {
-    return (
-      <div className="problem-loading">
-        <div className="spinner"></div>
-        <h2>Loading problem...</h2>
-      </div>
-    );
-  }
-
-  // Error state
-  if (error || !problem) {
-    return (
-      <div className="problem-error">
-        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="12"></line>
-          <line x1="12" y1="16" x2="12.01" y2="16"></line>
-        </svg>
-        <h2>Problem Not Found</h2>
-        <p>{error || "We couldn't find this problem. It might have been moved or deleted."}</p>
-        <Link to="/" className="return-button">Return to Problems</Link>
-      </div>
-    );
-  }
-
-  // Get difficulty badge color
-  const getDifficultyColor = (difficulty) => {
-    switch(difficulty?.toLowerCase()) {
-      case 'easy': return 'var(--secondary-color)';
-      case 'medium': return 'var(--warning-color)';
-      case 'hard': return 'var(--danger-color)';
-      default: return 'var(--primary-color)';
+      setLoadingRun(false);
     }
   };
 
+  // Custom Markdown Parser with advanced example extraction
+  const parseMarkdown = (md) => {
+    if (!md) return '';
+    let html = md
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    // Fenced Code blocks
+    html = html.replace(/```([\s\S]*?)```/g, (match, body) => {
+      return `<pre class="bg-slate-950 border border-[var(--border)] rounded-xl p-5 my-4 overflow-x-auto font-mono text-xs text-[#818cf8]"><code>${body.trim()}</code></pre>`;
+    });
+
+    // Inline code tags
+    html = html.replace(/`([^`]+)`/g, '<code class="bg-[#161b22]/80 border border-[#21262d] text-indigo-300 rounded px-1.5 py-0.5 font-mono text-xs">$1</code>');
+
+    // Bold text
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-bold text-slate-100">$1</strong>');
+
+    // Headings
+    html = html.replace(/^##\s+(.+)$/gm, '<h2 class="text-xs font-bold text-white uppercase tracking-wider mt-6 mb-3 border-b border-[#21262d] pb-2 flex items-center gap-2">$1</h2>');
+    html = html.replace(/^###\s+(.+)$/gm, '<h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-4 mb-2">$1</h3>');
+    html = html.replace(/^#\s+(.+)$/gm, '<h1 class="text-lg font-black text-white mt-6 mb-4">$1</h1>');
+
+    // Bullet points
+    html = html.replace(/^\s*-\s+(.+)$/gm, '<li class="text-slate-400 ml-5 list-disc my-1.5">$1</li>');
+
+    // Example Extraction Block
+    const lines = html.split('\n');
+    let outputLines = [];
+    let inExampleBlock = false;
+    let exampleBlockBuffer = [];
+
+    for (let line of lines) {
+      const trimmed = line.trim();
+      
+      // Match example markers e.g. **Example 1:**
+      if (trimmed.toLowerCase().includes('example') && (trimmed.startsWith('<strong') || trimmed.endsWith(':') || trimmed.includes('strong>'))) {
+        if (inExampleBlock) {
+          outputLines.push(flushExampleBlock(exampleBlockBuffer));
+          exampleBlockBuffer = [];
+        }
+        inExampleBlock = true;
+        const cleanHeader = trimmed.replace(/<\/?strong>/g, '').replace(/:$/, '').trim();
+        outputLines.push(`<div class="text-xs font-black text-white uppercase tracking-wider mt-6 mb-2.5 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_5px_#6366f1]"></span>${cleanHeader}</div>`);
+        continue;
+      }
+      
+      if (inExampleBlock) {
+        if (trimmed.includes('Input:') || trimmed.includes('Output:') || trimmed.includes('Explanation:') || trimmed.startsWith('Input') || trimmed.startsWith('Output')) {
+          exampleBlockBuffer.push(line);
+          continue;
+        } else if (trimmed === '' || trimmed === '<br />') {
+          continue;
+        } else {
+          outputLines.push(flushExampleBlock(exampleBlockBuffer));
+          exampleBlockBuffer = [];
+          inExampleBlock = false;
+        }
+      }
+      
+      outputLines.push(line);
+    }
+    
+    if (inExampleBlock && exampleBlockBuffer.length > 0) {
+      outputLines.push(flushExampleBlock(exampleBlockBuffer));
+    }
+
+    let finalHtml = outputLines.map(line => {
+      const t = line.trim();
+      if (t === '' || t === '<br />') return '';
+      if (t.startsWith('<h') || t.startsWith('<li') || t.startsWith('<pre') || t.startsWith('</pre') || t.startsWith('<div') || t.startsWith('</div')) {
+        return line;
+      }
+      return `<p class="my-2 text-slate-300 leading-relaxed">${line}</p>`;
+    }).join('\n');
+
+    return finalHtml;
+  };
+
+  const flushExampleBlock = (buffer) => {
+    let inputStr = '';
+    let outputStr = '';
+    let explanationStr = '';
+    
+    buffer.forEach(line => {
+      let clean = line.replace(/<\/?strong>/g, '').replace(/<br\s*\/?>/gi, '').trim();
+      
+      if (clean.startsWith('Input:') || clean.includes('Input:')) {
+        inputStr = clean.split('Input:')[1]?.trim() || '';
+      } else if (clean.startsWith('Output:') || clean.includes('Output:')) {
+        outputStr = clean.split('Output:')[1]?.trim() || '';
+      } else if (clean.startsWith('Explanation:') || clean.includes('Explanation:')) {
+        explanationStr = clean.split('Explanation:')[1]?.trim() || '';
+      } else {
+        if (explanationStr) {
+          explanationStr += ' ' + clean;
+        } else if (outputStr) {
+          outputStr += ' ' + clean;
+        } else if (inputStr) {
+          inputStr += ' ' + clean;
+        }
+      }
+    });
+
+    if (!inputStr && !outputStr && !explanationStr) {
+      return buffer.join('<br />');
+    }
+
+    return `
+<div class="bg-[var(--bg-surface)]/50 border border-[var(--border)] rounded-2xl p-5 my-4 font-sans text-xs space-y-3 shadow-inner">
+  ${inputStr ? `<div><span class="text-slate-500 font-bold uppercase tracking-wider text-[9px] block mb-1">Input</span><pre class="bg-[var(--bg-base)] border border-[var(--border)] p-2.5 rounded-xl font-mono text-slate-200 overflow-x-auto leading-relaxed">${inputStr}</pre></div>` : ''}
+  ${outputStr ? `<div><span class="text-slate-500 font-bold uppercase tracking-wider text-[9px] block mb-1">Output</span><pre class="bg-[var(--bg-base)] border border-[var(--border)] p-2.5 rounded-xl font-mono text-indigo-300 overflow-x-auto font-bold leading-relaxed">${outputStr}</pre></div>` : ''}
+  ${explanationStr ? `<div class="pt-2 border-t border-[var(--border)]" ><span class="text-slate-500 font-bold uppercase tracking-wider text-[9px] block mb-1">Explanation</span><p class="text-slate-400 leading-relaxed pl-0.5">${explanationStr}</p></div>` : ''}
+</div>`;
+  };
+
+  const getDifficultyColor = (diff) => {
+    switch (diff?.toLowerCase()) {
+      case 'easy': return 'bg-green-500/10 text-green-400 border border-green-500/20';
+      case 'medium': return 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20';
+      case 'hard': return 'bg-red-500/10 text-red-400 border border-red-500/20';
+      default: return 'bg-slate-800 text-slate-400 border-[#21262d]';
+    }
+  };
+
+  // capitalizeFirst is now a module-level utility function defined above
+
+  if (loadingProblem) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-[var(--bg-base)]">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-indigo-500 mx-auto"></div>
+          <p className="text-[#8b949e] text-xs font-semibold tracking-widest uppercase">Loading workspace...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !problem) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-[var(--bg-base)] text-center p-6 space-y-4">
+        <svg className="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10" strokeWidth={2} />
+          <line x1="12" y1="8" x2="12" y2="12" strokeWidth={2} />
+          <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth={2.5} />
+        </svg>
+        <h2 className="text-sm font-bold text-white uppercase tracking-wider">Loading failed</h2>
+        <p className="text-[#8b949e] max-w-sm text-xs">{error || "This problem could not be loaded."}</p>
+        <button onClick={() => navigate('/')} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-[#21262d] rounded-xl text-xs font-bold uppercase tracking-wider transition-colors">
+          Dashboard
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="problem-detail">
-      <div className="problem-header">
-        <div className="problem-header-content">
-          <div className="problem-header-top">
-            <Link to="/" className="back-button">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="19" y1="12" x2="5" y2="12"></line>
-                <polyline points="12 19 5 12 12 5"></polyline>
-              </svg>
-              All Problems
-            </Link>
-            
-            <div className="problem-meta">
-              {problem.topic && (
-                <span className="problem-topic">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-                    <polyline points="2 17 12 22 22 17"></polyline>
-                    <polyline points="2 12 12 17 22 12"></polyline>
-                  </svg>
-                  {problem.topic}
-                </span>
-              )}
-              
-              {problem.difficulty && (
-                <span className={`problem-difficulty difficulty-${problem.difficulty?.toLowerCase()}`}>
-                  {problem.difficulty === 'Easy' ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 22C6.5 22 2 17.5 2 12S6.5 2 12 2s10 4.5 10 10-4.5 10-10 10z"></path>
-                      <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
-                      <line x1="9" y1="9" x2="9.01" y2="9"></line>
-                      <line x1="15" y1="9" x2="15.01" y2="9"></line>
-                    </svg>
-                  ) : problem.difficulty === 'Medium' ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 22C6.5 22 2 17.5 2 12S6.5 2 12 2s10 4.5 10 10-4.5 10-10 10z"></path>
-                      <line x1="8" y1="12" x2="16" y2="12"></line>
-                      <line x1="9" y1="9" x2="9.01" y2="9"></line>
-                      <line x1="15" y1="9" x2="15.01" y2="9"></line>
-                    </svg>
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 22C6.5 22 2 17.5 2 12S6.5 2 12 2s10 4.5 10 10-4.5 10-10 10z"></path>
-                      <path d="M16 16s-1.5-2-4-2-4 2-4 2"></path>
-                      <line x1="9" y1="9" x2="9.01" y2="9"></line>
-                      <line x1="15" y1="9" x2="15.01" y2="9"></line>
-                    </svg>
-                  )}
-                  {problem.difficulty}
-                </span>
-              )}
-            </div>
-          </div>
-          
-          <h1 className="problem-title">{problem.title}</h1>
+    <div className="flex-1 flex flex-col bg-[var(--bg-base)] h-full overflow-hidden" ref={splitContainerRef}>
+      
+      {/* Workspace Header */}
+      <div className="bg-[var(--bg-surface)]/80 border-b border-[var(--border)] px-4 py-2.5 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/')}
+            className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-slate-800/60 transition-colors focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <span className="text-[10px] font-bold text-[#8b949e] uppercase tracking-widest">Workspace</span>
+          <span className="text-slate-600 font-medium">/</span>
+          <h2 className="text-sm font-bold text-white truncate max-w-[200px] sm:max-w-[400px]">
+            {problem.title}
+          </h2>
+        </div>
+
+        <div className="flex items-center gap-3 select-none">
+          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${getDifficultyColor(problem.difficulty)}`}>
+            {capitalizeFirst(problem.difficulty)}
+          </span>
+          <span className="bg-indigo-500/10 border border-indigo-500/25 text-indigo-400 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+            {problem.topic}
+          </span>
         </div>
       </div>
 
-      <div className="split-pane" ref={splitPaneRef}>
-        <div className="problem-description-panel">
-          <div className="panel-content">
-            <div className="description-content">
-              {problem.description ? (
-                <div dangerouslySetInnerHTML={{ __html: problem.description }} />
-              ) : (
-                <div className="p-4 border rounded bg-gray-50">
-                  <h2 className="text-lg font-medium">Two Sum</h2>
-                  <p className="mt-2">Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target.</p>
-                  <p className="mt-2">You may assume that each input would have exactly one solution, and you may not use the same element twice.</p>
-                  <p className="mt-2">You can return the answer in any order.</p>
-                  
-                  <div className="mt-4">
-                    <h3 className="font-medium">Example 1:</h3>
-                    <pre className="bg-gray-100 p-2 mt-1 rounded">
-                      <p>Input: nums = [2,7,11,15], target = 9</p>
-                      <p>Output: [0,1]</p>
-                      <p>Explanation: Because nums[0] + nums[1] == 9, we return [0, 1].</p>
-                    </pre>
-                  </div>
-                </div>
+      {/* Main Split Panels */}
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+        
+        {/* Left Description Column */}
+        <div 
+          className="flex flex-col bg-[var(--bg-surface)]/15 border-r border-[var(--border)] overflow-hidden"
+          style={{ width: `${leftWidth}%` }}
+        >
+          {/* Tabs bar */}
+          <div className="flex bg-[var(--bg-surface)]/50 border-b border-[var(--border)] px-4 flex-shrink-0 select-none">
+            <button
+              onClick={() => setActiveTab('description')}
+              className={`px-3 py-3 border-b-2 text-[10px] font-bold uppercase tracking-widest transition-all focus:outline-none ${
+                activeTab === 'description'
+                  ? 'border-indigo-500 text-indigo-400'
+                  : 'border-transparent text-[#8b949e] hover:text-[#f0f6fc]'
+              }`}
+            >
+              Description
+            </button>
+            <button
+              onClick={() => setActiveTab('hints')}
+              className={`px-3 py-3 border-b-2 text-[10px] font-bold uppercase tracking-widest transition-all focus:outline-none flex items-center gap-1.5 ${
+                activeTab === 'hints'
+                  ? 'border-indigo-500 text-indigo-400'
+                  : 'border-transparent text-[#8b949e] hover:text-[#f0f6fc]'
+              }`}
+            >
+              Hints
+              {hints.length > 0 && (
+                <span className="w-5 h-5 bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 rounded-full flex items-center justify-center text-[9px] font-bold">
+                  {hints.length}
+                </span>
               )}
-              
-              {problem.tests && problem.tests.length > 0 && (
-                <div className="examples">
-                  <h3>Examples</h3>
-                  {problem.tests.map((test, i) => (
-                    <div key={i} className="example">
-                      <div className="example-header">Example {i+1}</div>
-                      <div className="example-content">
-                        <div className="example-io">
-                          <div className="example-input">
-                            <div className="io-label">Input</div>
-                            <pre>{test.input}</pre>
-                          </div>
-                          <div className="example-output">
-                            <div className="io-label">Output</div>
-                            <pre>{test.expected}</pre>
-                          </div>
-                        </div>
-                        {test.explanation && (
-                          <div className="example-explanation">
-                            <div className="explanation-label">Explanation</div>
-                            <div>{test.explanation}</div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('submissions')}
+              className={`px-3 py-3 border-b-2 text-[10px] font-bold uppercase tracking-widest transition-all focus:outline-none flex items-center gap-1.5 ${
+                activeTab === 'submissions'
+                  ? 'border-indigo-500 text-indigo-400'
+                  : 'border-transparent text-[#8b949e] hover:text-[#f0f6fc]'
+              }`}
+            >
+              History
+              {localSubmissions.length > 0 && (
+                <span className="w-5 h-5 bg-slate-800 text-slate-400 rounded-full flex items-center justify-center text-[9px] font-semibold">
+                  {localSubmissions.length}
+                </span>
               )}
-            </div>
+            </button>
           </div>
-        </div>
-        
-        <div className="resize-handle" ref={resizeHandleRef}></div>
-        
-        <div className="problem-solution-panel">
-          <div className="solution-container">
-            <div className="editor-header">
-              <div className="language-selector">
-                <div className="selector-label">Language:</div>
-                <div className="selector-options">
-                  <button 
-                    className={`language-option ${language === 'javascript' ? 'active' : ''}`} 
-                    onClick={() => setLanguage('javascript')}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M0 0h24v24H0V0zm22.034 18.276c-.175-1.095-.888-2.015-3.003-2.873-.736-.345-1.554-.585-1.797-1.14-.091-.33-.105-.51-.046-.705.15-.646.915-.84 1.515-.66.39.12.75.42.976.9 1.034-.676 1.034-.676 1.755-1.125-.27-.42-.404-.601-.586-.78-.63-.705-1.469-1.065-2.834-1.034l-.705.089c-.676.165-1.32.525-1.71 1.005-1.14 1.291-.811 3.541.569 4.471 1.365 1.02 3.361 1.244 3.616 2.205.24 1.17-.87 1.545-1.966 1.41-.811-.18-1.26-.586-1.755-1.336l-1.83 1.051c.21.48.45.689.81 1.109 1.74 1.756 6.09 1.666 6.871-1.004.029-.09.24-.705.074-1.65l.046.067zm-8.983-7.245h-2.248c0 1.938-.009 3.864-.009 5.805 0 1.232.063 2.363-.138 2.711-.33.689-1.18.601-1.566.48-.396-.196-.597-.466-.83-.855-.063-.105-.11-.196-.127-.196l-1.825 1.125c.305.63.75 1.172 1.324 1.517.855.51 2.004.675 3.207.405.783-.226 1.458-.691 1.811-1.411.51-.93.402-2.07.397-3.346.012-2.054 0-4.109 0-6.179l.004-.056z" />
+
+          {/* Scroll Content Area */}
+          <div className="flex-1 overflow-auto p-5 space-y-6">
+            
+            {activeTab === 'description' && (
+              <div className="prose prose-invert max-w-none text-[#8b949e] text-xs leading-relaxed space-y-4">
+                {problem.description ? (
+                  <div dangerouslySetInnerHTML={{ __html: parseMarkdown(problem.description) }} />
+                ) : (
+                  <p>No description loaded.</p>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'hints' && (
+              <div className="space-y-4">
+                {/* Request Hint banner */}
+                <div className="bg-[var(--bg-surface)]/60 border border-[var(--border)] p-5 rounded-2xl text-center space-y-4 shadow-xl">
+                  <div className="w-10 h-10 bg-indigo-500/10 rounded-full border border-indigo-500/30 flex items-center justify-center text-indigo-400 mx-auto shadow-md shadow-indigo-500/5">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                     </svg>
-                    JavaScript
-                  </button>
-                  <button 
-                    className={`language-option ${language === 'python' ? 'active' : ''}`} 
-                    onClick={() => setLanguage('python')}
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-xs font-bold text-white uppercase tracking-wider">Progressive Assist</h3>
+                    <p className="text-[11px] text-[#8b949e] max-w-xs mx-auto">Generate hint cards suited to your current evaluation. No spoiler code blocks.</p>
+                  </div>
+                  <button
+                    onClick={requestHint}
+                    disabled={loadingHint}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-indigo-500/10 disabled:opacity-50 active:scale-[0.98] inline-flex items-center gap-2"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M14.25.18l.9.2.73.26.59.3.45.32.34.34.25.34.16.33.1.3.04.26.02.2-.01.13V8.5l-.05.63-.13.55-.21.46-.26.38-.3.31-.33.25-.35.19-.35.14-.33.1-.3.07-.26.04-.21.02H8.77l-.69.05-.59.14-.5.22-.41.27-.33.32-.27.35-.2.36-.15.37-.1.35-.07.32-.04.27-.02.21v3.06H3.17l-.21-.03-.28-.07-.32-.12-.35-.18-.36-.26-.36-.36-.35-.46-.32-.59-.28-.73-.21-.88-.14-1.05-.05-1.23.06-1.22.16-1.04.24-.87.32-.71.36-.57.4-.44.42-.33.42-.24.4-.16.36-.1.32-.05.24-.01h.16l.06.01h8.16v-.83H6.18l-.01-2.75-.02-.37.05-.34.11-.31.17-.28.25-.26.31-.23.38-.2.44-.18.51-.15.58-.12.64-.1.71-.06.77-.04.84-.02 1.27.05zm-6.3 1.98l-.23.33-.08.41.08.41.23.34.33.22.41.09.41-.09.33-.22.23-.34.08-.41-.08-.41-.23-.33-.33-.22-.41-.09-.41.09zm13.09 3.95l.28.06.32.12.35.18.36.27.36.35.35.47.32.59.28.73.21.88.14 1.04.05 1.23-.06 1.23-.16 1.04-.24.86-.32.71-.36.57-.4.45-.42.33-.42.24-.4.16-.36.09-.32.05-.24.02-.16-.01h-8.22v.82h5.84l.01 2.76.02.36-.05.34-.11.31-.17.29-.25.25-.31.24-.38.2-.44.17-.51.15-.58.13-.64.09-.71.07-.77.04-.84.01-1.27-.04-1.07-.14-.9-.2-.73-.25-.59-.3-.45-.33-.34-.34-.25-.34-.16-.33-.1-.3-.04-.25-.02-.2.01-.13v-5.34l.05-.64.13-.54.21-.46.26-.38.3-.32.33-.24.35-.2.35-.14.33-.1.3-.06.26-.04.21-.02.13-.01h5.84l.69-.05.59-.14.5-.21.41-.28.33-.32.27-.35.2-.36.15-.36.1-.35.07-.32.04-.28.02-.21V6.07h2.09l.14.01zm-6.47 14.25l-.23.33-.08.41.08.41.23.33.33.23.41.08.41-.08.33-.23.23-.33.08-.41-.08-.41-.23-.33-.33-.23-.41-.08-.41.08z"/>
-                    </svg>
-                    Python
-                  </button>
-                  <button 
-                    className={`language-option ${language === 'java' ? 'active' : ''}`} 
-                    onClick={() => setLanguage('java')}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M8.851 18.56s-.917.534.653.714c1.902.218 2.874.187 4.969-.211 0 0 .552.346 1.321.646-4.699 2.013-10.633-.118-6.943-1.149M8.276 15.933s-1.028.761.542.924c2.032.209 3.636.227 6.413-.308 0 0 .384.389.987.602-5.679 1.661-12.007.13-7.942-1.218M13.116 11.475c1.158 1.333-.304 2.533-.304 2.533s2.939-1.518 1.589-3.418c-1.261-1.772-2.228-2.652 3.007-5.688 0-.001-8.216 2.051-4.292 6.573M19.33 20.504s.679.559-.747.991c-2.712.822-11.288 1.069-13.669.033-.856-.373.75-.89 1.254-.998.527-.114.828-.93 1.828-..93.045-.011-1.126.026-2.126.983-3.695 3.655-10.488-.42-4.501M9.292 13.21s-2.045.484-1.069.69c.825.169 2.466.15 3.995.077 1.249-.061 2.502-.17 2.502-.17s-.439.187-1.072.411c-3.371 1.127-9.52.829-7.083-.189 2.619-1.244 3.027-.99 3.027-.99M17.116 17.584c3.429-1.18 1.842-4.116 1.842-4.116s-.287 1.218-1.121 1.841c-.562 1.116-2.824 1.657-3.124 1.777.628-.301 1.908-1.429 2.403-2.777 0 0-.441.726-3.495 1.381l.793-.436c.793-.436 1.593-.903 2.154-2.755 1.269-.021.059 5.285-.452 5.085" />
-                      <path d="M12 24c6.627 0 12-5.373 12-12S18.627 0 12 0 0 5.373 0 12s5.373 12 12 12zm-6.551-6.831c-.377.291-.972.3-1.124.3-.798 0-1.183-.36-1.183-.858 0-.157.048-.317.137-.475.108-.194.336-.39.663-.39.211 0 .467.096.748.277.374.243.468.342.621.704l.138.362zm7.205-.565c.126.382.106.811-.062 1.163-.156.328-.433.601-.835.743-.174.062-.367.096-.567.102-.938.027-1.691-.473-1.691-1.104 0-.741.893-1.326 2.422-1.122.005.075.011.15.014.218.02.395-.016.704-.109.999l.025-.022.411-.395.392-.382zm2.684 1.57c.105 0 .208.006.308.018.817.096 1.314.59 1.314 1.292 0 1.993-2.238 3.887-5.539 3.887-2.923 0-4.899-1.086-4.899-2.962 0-.455.136-.888.379-1.279.886-1.43 3.361-2.311 5.924-2.311.155 0 .31.003.465.011.777.039 1.289.171 1.746.344.199-.249.447-.516.565-.652a9.191 9.191 0 00-.327-.257c-.54-.391-1.248-.723-2.097-.964-.582-.165-1.195-.251-1.885-.257C7.764 15.569 5 16.782 5 18.61c0 1.721 2.56 3.003 5.954 3.081 3.352.078 6.085-1.225 6.085-2.946 0-.455-.162-.872-.455-1.228-.15-.182-.334-.345-.551-.49a8.76 8.76 0 00-.343-.201c-.015-.007-.032-.021-.032-.045 0-.027.021-.042.049-.042h.183zm-13.997.541c-.115.247-.368.401-.623.401-.414 0-.749-.334-.749-.748 0-.414.335-.75.749-.75s.75.336.75.75a.756.756 0 01-.127.347zm4.099-8.54c-.211-.193-.495-.296-.788-.296-.109 0-.221.015-.329.047-1.066.313-.836 2.429.348 4.358.128.21.268.404.415.584.819-1.14 1.224-2.536.696-3.635-.161-.336-.398-.608-.719-.822l.182-.171.195-.065zm1.526 4.893c-.17-.146-.303-.252-.303-.252s.056.034.151.097l.062.054c.13.121.234.245.316.38.134.221.2.463.189.707-.7.145-.042.291-.106.429-.134.29-.367.56-.636.757l.222-.055c.165-.043.396-.194.543-.345.269-.277.416-.652.415-1.044 0-.211-.043-.437-.12-.651-.1-.273-.243-.458-.424-.635-.99-.097-.219-.208-.309-.44zm1.847-.981c-.246.246-.617.348-.969.247-.352-.101-.546-.419-.546-.774s.194-.672.546-.773c.352-.101.723 0 .969.246s.347.618.245.97-.195.547-.775.547l.53-.463z" />
-                    </svg>
-                    Java
+                    {loadingHint ? (
+                      <>
+                        <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white"></div>
+                        <span>Evaluating...</span>
+                      </>
+                    ) : (
+                      <span>Request Hint</span>
+                    )}
                   </button>
                 </div>
-              </div>
-              
-              <div className="solution-actions">
-                <button 
-                  onClick={runCode} 
-                  disabled={loadingRun}
-                  className="run-button"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                  </svg>
-                  {loadingRun ? 'Running...' : 'Run Code'}
-                </button>
-                <button 
-                  onClick={submitSolution}
-                  disabled={loadingRun}
-                  className="submit-button"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                  </svg>
-                  {loadingRun ? 'Submitting...' : 'Submit'}
-                </button>
-              </div>
-            </div>
-            
-            <div className="editor-wrapper">
-              <MonacoEditor
-                value={code}
-                onChange={setCode}
-                language={language}
-                theme="vs-dark"
-              />
-            </div>
-            
-            <div className="solution-tabs">
-              <div className="tabs-header">
-                <button className="tab-button active">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                  </svg>
-                  Results
-                </button>
-                <button 
-                  className="tab-button hint-tab"
-                  onClick={requestHint}
-                  disabled={loadingHint}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                  </svg>
-                  {loadingHint ? 'Getting Hint...' : hints.length > 0 ? `Hints (${hints.length})` : 'Get Hint'}
-                </button>
-              </div>
-              
-              <div className="tabs-content">
-                <div className="tab-panel active">
-                  {!runResult && (
-                    <div className="empty-results">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                        <polyline points="14 2 14 8 20 8"></polyline>
-                        <line x1="16" y1="13" x2="8" y2="13"></line>
-                        <line x1="16" y1="17" x2="8" y2="17"></line>
-                        <polyline points="10 9 9 9 8 9"></polyline>
-                      </svg>
-                      <p>Run your code to see results here</p>
-                    </div>
-                  )}
-                  
-                  {runResult && (
-                    <div className={`run-results ${runResult.success ? 'success' : 'failure'}`}>
-                      <div className="result-header">
-                        <div className="result-status">
-                          {runResult.success ? (
-                            <svg className="success-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                              <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                            </svg>
-                          ) : (
-                            <svg className="failure-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <circle cx="12" cy="12" r="10"></circle>
-                              <line x1="15" y1="9" x2="9" y2="15"></line>
-                              <line x1="9" y1="9" x2="15" y2="15"></line>
-                            </svg>
-                          )}
-                          {runResult.isSubmission ? 'Submission' : 'Run'} {runResult.success ? 'Successful' : 'Failed'}
+
+                {/* Hints progressive reveal timeline */}
+                <div className="space-y-4 pt-2">
+                  {hints.map((hint, idx) => {
+                    const levelLabel = hint.level === 1 ? 'Conceptual' : hint.level === 2 ? 'Approach' : 'Implementation';
+                    const rating = hintRatings[hint.id];
+                    const activeHoverStar = hoverStar[hint.id] || 0;
+                    return (
+                      <div 
+                        key={idx} 
+                        className="bg-[var(--bg-surface)]/40 border border-[var(--border)] rounded-2xl p-5 space-y-3.5 animate-fade-in shadow-sm"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20 uppercase tracking-widest">
+                            Lvl {hint.level}: {levelLabel}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                            {hint.timestamp ? new Date(hint.timestamp).toLocaleTimeString() : 'Just now'}
+                          </span>
                         </div>
                         
-                        {runResult.execution_time && (
-                          <div className="execution-time">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <circle cx="12" cy="12" r="10"></circle>
-                              <polyline points="12 6 12 12 16 14"></polyline>
-                            </svg>
-                            {runResult.execution_time}
-                          </div>
-                        )}
-                      </div>
-                      
-                      {runResult.results && runResult.results.length > 0 && (
-                        <div className="test-results">
-                          {runResult.results.map((result, i) => (
-                            <div key={i} className={`test-case ${result.passed ? 'passed' : 'failed'}`}>
-                              <div className="test-header">
-                                {result.passed ? (
-                                  <svg className="test-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                                  </svg>
-                                ) : (
-                                  <svg className="test-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <circle cx="12" cy="12" r="10"></circle>
-                                    <line x1="15" y1="9" x2="9" y2="15"></line>
-                                    <line x1="9" y1="9" x2="15" y2="15"></line>
-                                  </svg>
-                                )}
-                                Test Case {i+1}: {result.passed ? 'Passed' : 'Failed'}
-                              </div>
-                              
-                              {!result.passed && (
-                                <div className="test-details">
-                                  <div className="test-io">
-                                    <div className="test-input">
-                                      <div className="io-label">Input:</div>
-                                      <pre>{result.input}</pre>
-                                    </div>
-                                    <div className="test-expected">
-                                      <div className="io-label">Expected:</div>
-                                      <pre>{result.expected}</pre>
-                                    </div>
-                                    <div className="test-output">
-                                      <div className="io-label">Your Output:</div>
-                                      <pre>{result.output}</pre>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      
-                      {runResult.errors && runResult.errors.length > 0 && (
-                        <div className="error-messages">
-                          {runResult.errors.map((error, i) => (
-                            <div key={i} className="error-message">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                              </svg>
-                              <div>
-                                {error.line && <span className="error-line">Line {error.line}: </span>}
-                                {error.message}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                
-                <div className="tab-panel hints-panel">
-                  {hints.length === 0 ? (
-                    <div className="empty-hints">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                      </svg>
-                      <p>Click the "Get Hint" button when you're stuck</p>
-                    </div>
-                  ) : (
-                    <div className="hints-list">
-                      {hints.map((hint, index) => (
-                        <div key={index} className={`hint ${hint.level || 'normal'}`}>
-                          <div className="hint-header">
-                            <div className="hint-level">
-                              {hint.level === 'error' ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <circle cx="12" cy="12" r="10"></circle>
-                                  <line x1="12" y1="8" x2="12" y2="12"></line>
-                                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                                </svg>
-                              ) : hint.level === 'warning' ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                                  <line x1="12" y1="9" x2="12" y2="13"></line>
-                                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                                </svg>
-                              ) : (
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <circle cx="12" cy="12" r="10"></circle>
-                                  <line x1="12" y1="16" x2="12" y2="12"></line>
-                                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                                </svg>
-                              )}
-                              {hint.level === 'error' ? 'Error' : hint.level === 'warning' ? 'Warning' : 'Hint'}
-                            </div>
-                            {hint.timestamp && (
-                              <div className="hint-time">
-                                {new Date(hint.timestamp).toLocaleTimeString()}
-                              </div>
+                        <p className="text-slate-300 text-xs leading-relaxed whitespace-pre-line">
+                          {hint.content}
+                        </p>
+
+                        {/* Feedback Rating Block with glowing stars */}
+                        <div className="pt-3.5 border-t border-[#21262d]/50 flex items-center justify-between text-xs text-slate-400 select-none">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Helpful?</span>
+                          <div className="flex items-center gap-1.5">
+                            {rating ? (
+                              <span className="text-indigo-400 font-bold text-[9px] bg-indigo-500/5 px-2.5 py-0.5 rounded border border-indigo-500/10 uppercase tracking-wider">
+                                Rated {rating} / 5
+                              </span>
+                            ) : (
+                              [1, 2, 3, 4, 5].map((starVal) => {
+                                const isHighlighted = starVal <= (activeHoverStar || 0);
+                                return (
+                                  <button
+                                    key={starVal}
+                                    onMouseEnter={() => setHoverStar(prev => ({ ...prev, [hint.id]: starVal }))}
+                                    onMouseLeave={() => setHoverStar(prev => ({ ...prev, [hint.id]: 0 }))}
+                                    onClick={() => handleRateHint(hint.id, starVal)}
+                                    className={`p-0.5 rounded transition-all focus:outline-none focus:ring-1 focus:ring-amber-400/30 ${
+                                      isHighlighted ? 'text-amber-400 scale-110' : 'text-slate-600 hover:text-amber-400'
+                                    }`}
+                                  >
+                                    <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
+                                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                    </svg>
+                                  </button>
+                                );
+                              })
                             )}
                           </div>
-                          <div className="hint-content">
-                            {hint.content}
-                          </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            </div>
+            )}
+
+            {activeTab === 'submissions' && (
+              <div className="space-y-4">
+                {localSubmissions.length === 0 ? (
+                  <div className="text-center py-10 text-slate-500 text-xs font-bold uppercase tracking-wider">
+                    No run history loaded.
+                  </div>
+                ) : (
+                  localSubmissions.map((sub, idx) => (
+                    <div 
+                      key={idx} 
+                      className="bg-[var(--bg-surface)]/35 border border-[var(--border)] p-4 rounded-xl flex items-center justify-between gap-4 hover:border-slate-700 transition-colors"
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2.5 h-2.5 rounded-full ${
+                            sub.status === 'success' ? 'bg-green-500 shadow-[0_0_5px_#22c55e]' : 'bg-red-500 shadow-[0_0_5px_#ef4444]'
+                          }`} />
+                          <span className="text-xs font-black uppercase tracking-wider text-slate-200">{sub.status}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                          <span>{sub.language}</span>
+                          <span>•</span>
+                          <span>{sub.executionTime}</span>
+                          <span>•</span>
+                          <span>{new Date(sub.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setCode(sub.code)}
+                        className="px-2.5 py-1 text-[9px] font-black text-slate-400 bg-[var(--bg-base)] border border-[var(--border)] rounded-lg hover:text-slate-200 hover:border-slate-700 transition-all uppercase focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+                      >
+                        Restore
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
           </div>
         </div>
-      </div>
-      
-      <style jsx>{`
-        .problem-detail {
-          display: flex;
-          flex-direction: column;
-          height: calc(100vh - 64px);
-          overflow: hidden;
-        }
-        
-        .problem-loading, .problem-error {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          height: calc(100vh - 64px);
-          text-align: center;
-          padding: 2rem;
-        }
-        
-        .problem-loading .spinner {
-          width: 50px;
-          height: 50px;
-          border: 4px solid var(--gray-200);
-          border-top-color: var(--primary-color);
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-          margin-bottom: 1.5rem;
-        }
-        
-        .problem-error svg {
-          color: var(--danger-color);
-          margin-bottom: 1.5rem;
-          opacity: 0.8;
-        }
-        
-        .problem-error h2 {
-          margin-bottom: 0.75rem;
-          color: var(--gray-800);
-        }
-        
-        .problem-error p {
-          max-width: 500px;
-          margin-bottom: 1.5rem;
-          color: var(--gray-600);
-        }
-        
-        .return-button {
-          display: inline-flex;
-          align-items: center;
-          background-color: var(--primary-color);
-          color: white;
-          padding: 0.75rem 1.5rem;
-          border-radius: var(--radius-md);
-          font-weight: 500;
-          transition: all 0.2s ease;
-          text-decoration: none;
-        }
-        
-        .return-button:hover {
-          background-color: var(--primary-dark);
-          text-decoration: none;
-        }
-        
-        .problem-header {
-          background: white;
-          border-bottom: 1px solid var(--gray-200);
-          padding: 1rem 1.5rem;
-          z-index: 10;
-        }
-        
-        .problem-header-content {
-          max-width: 1400px;
-          margin: 0 auto;
-        }
-        
-        .problem-header-top {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 0.75rem;
-        }
-        
-        .back-button {
-          display: flex;
-          align-items: center;
-          color: var(--gray-600);
-          text-decoration: none;
-          font-size: 0.95rem;
-          padding: 0.5rem;
-          border-radius: var(--radius-md);
-          transition: all 0.2s ease;
-        }
-        
-        .back-button svg {
-          margin-right: 0.5rem;
-        }
-        
-        .back-button:hover {
-          color: var(--primary-color);
-          background-color: var(--gray-100);
-          text-decoration: none;
-        }
-        
-        .problem-meta {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-        }
-        
-        .problem-topic {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: 0.9rem;
-          color: var(--gray-600);
-          padding: 0.35rem 0.75rem;
-          background-color: var(--gray-100);
-          border-radius: var(--radius-md);
-        }
-        
-        .problem-difficulty {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: 0.9rem;
-          font-weight: 500;
-          padding: 0.35rem 0.75rem;
-          border-radius: var(--radius-md);
-        }
-        
-        .difficulty-easy {
-          background-color: rgba(16, 185, 129, 0.1);
-          color: var(--secondary-dark);
-        }
-        
-        .difficulty-medium {
-          background-color: rgba(245, 158, 11, 0.1);
-          color: var(--warning-color);
-        }
-        
-        .difficulty-hard {
-          background-color: rgba(239, 68, 68, 0.1);
-          color: var(--danger-color);
-        }
-        
-        .problem-title {
-          font-size: 1.75rem;
-          font-weight: 700;
-          color: var(--gray-900);
-          margin: 0;
-        }
-        
-        .split-pane {
-          display: flex;
-          flex: 1;
-          overflow: hidden;
-          position: relative;
-        }
-        
-        .resize-handle {
-          width: 8px;
-          background-color: var(--gray-200);
-          cursor: col-resize;
-          transition: background-color 0.2s ease;
-          z-index: 10;
-        }
-        
-        .resize-handle:hover {
-          background-color: var(--gray-300);
-        }
-        
-        .problem-description-panel {
-          flex: 0 0 40%;
-          overflow-y: auto;
-          background-color: white;
-          border-right: 1px solid var(--gray-200);
-        }
-        
-        .panel-content {
-          padding: 1.5rem;
-        }
-        
-        .description-content {
-          max-width: 800px;
-          line-height: 1.6;
-          color: var(--gray-800);
-        }
-        
-        .description-content h1,
-        .description-content h2,
-        .description-content h3 {
-          color: var(--gray-900);
-          margin-top: 1.5rem;
-          margin-bottom: 0.75rem;
-        }
-        
-        .description-content p {
-          margin-bottom: 1rem;
-        }
-        
-        .description-content pre,
-        .description-content code {
-          background-color: var(--gray-100);
-          border-radius: var(--radius-sm);
-          font-family: Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-          font-size: 0.9em;
-        }
-        
-        .description-content code {
-          padding: 0.2em 0.4em;
-        }
-        
-        .description-content pre {
-          padding: 1rem;
-          overflow-x: auto;
-          margin: 1rem 0;
-        }
-        
-        .description-content ul,
-        .description-content ol {
-          margin-bottom: 1rem;
-          margin-left: 1.5rem;
-        }
-        
-        .examples {
-          margin-top: 2rem;
-        }
-        
-        .example {
-          background-color: var(--gray-50);
-          border-radius: var(--radius-md);
-          margin-bottom: 1.25rem;
-          overflow: hidden;
-        }
-        
-        .example-header {
-          font-weight: 600;
-          padding: 0.75rem 1rem;
-          background-color: var(--gray-100);
-          color: var(--gray-800);
-        }
-        
-        .example-content {
-          padding: 1rem;
-        }
-        
-        .example-io {
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-        }
-        
-        .example-input,
-        .example-output,
-        .example-explanation {
-          background-color: white;
-          border-radius: var(--radius-sm);
-          padding: 0.75rem;
-          border: 1px solid var(--gray-200);
-        }
-        
-        .io-label,
-        .explanation-label {
-          font-weight: 500;
-          color: var(--gray-700);
-          margin-bottom: 0.5rem;
-          font-size: 0.9rem;
-        }
-        
-        .example-io pre {
-          margin: 0;
-          font-family: Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-          font-size: 0.9rem;
-          overflow-x: auto;
-          color: var(--gray-800);
-          padding: 0;
-          background-color: transparent;
-        }
-        
-        .example-explanation {
-          margin-top: 1rem;
-        }
-        
-        .problem-solution-panel {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          background-color: var(--gray-50);
-          overflow: hidden;
-        }
-        
-        .solution-container {
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-        }
-        
-        .editor-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 1rem 1.5rem;
-          background-color: white;
-          border-bottom: 1px solid var(--gray-200);
-        }
-        
-        .language-selector {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-        }
-        
-        .selector-label {
-          font-weight: 500;
-          color: var(--gray-700);
-          font-size: 0.95rem;
-        }
-        
-        .selector-options {
-          display: flex;
-          background-color: var(--gray-100);
-          border-radius: var(--radius-md);
-          padding: 0.25rem;
-        }
-        
-        .language-option {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.5rem 0.75rem;
-          border: none;
-          background-color: transparent;
-          cursor: pointer;
-          font-size: 0.9rem;
-          color: var(--gray-600);
-          border-radius: var(--radius-sm);
-          transition: all 0.2s ease;
-        }
-        
-        .language-option:hover {
-          color: var(--gray-800);
-        }
-        
-        .language-option.active {
-          background-color: white;
-          box-shadow: var(--shadow-sm);
-          color: var(--gray-900);
-          font-weight: 500;
-        }
-        
-        .solution-actions {
-          display: flex;
-          gap: 0.75rem;
-        }
-        
-        .run-button,
-        .submit-button {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.5rem 1rem;
-          border-radius: var(--radius-md);
-          font-weight: 500;
-          font-size: 0.95rem;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          border: none;
-        }
-        
-        .run-button {
-          background-color: var(--gray-100);
-          color: var(--gray-800);
-        }
-        
-        .run-button:hover {
-          background-color: var(--gray-200);
-        }
-        
-        .submit-button {
-          background-color: var(--primary-color);
-          color: white;
-        }
-        
-        .submit-button:hover {
-          background-color: var(--primary-dark);
-        }
-        
-        .run-button:disabled,
-        .submit-button:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-        
-        .editor-wrapper {
-          flex: 1;
-          overflow: hidden;
-        }
-        
-        .solution-tabs {
-          border-top: 1px solid var(--gray-200);
-          background-color: white;
-        }
-        
-        .tabs-header {
-          display: flex;
-          padding: 0 1rem;
-          border-bottom: 1px solid var(--gray-200);
-        }
-        
-        .tab-button {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.75rem 1.25rem;
-          background-color: transparent;
-          border: none;
-          cursor: pointer;
-          color: var(--gray-600);
-          font-size: 0.95rem;
-          font-weight: 500;
-          border-bottom: 2px solid transparent;
-          transition: all 0.2s ease;
-        }
-        
-        .tab-button:hover {
-          color: var(--gray-800);
-        }
-        
-        .tab-button.active {
-          color: var(--primary-color);
-          border-bottom-color: var(--primary-color);
-        }
-        
-        .hint-tab {
-          color: var(--secondary-color);
-        }
-        
-        .hint-tab:hover {
-          color: var(--secondary-dark);
-        }
-        
-        .hint-tab.active {
-          color: var(--secondary-color);
-          border-bottom-color: var(--secondary-color);
-        }
-        
-        .tabs-content {
-          max-height: 300px;
-          overflow-y: auto;
-        }
-        
-        .tab-panel {
-          display: none;
-          padding: 1.25rem;
-        }
-        
-        .tab-panel.active {
-          display: block;
-        }
-        
-        .empty-results,
-        .empty-hints {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 3rem 2rem;
-          color: var(--gray-400);
-          text-align: center;
-        }
-        
-        .empty-results svg,
-        .empty-hints svg {
-          margin-bottom: 1rem;
-          color: var(--gray-300);
-        }
-        
-        .run-results {
-          color: var(--gray-800);
-        }
-        
-        .result-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 1rem;
-          padding-bottom: 0.75rem;
-          border-bottom: 1px solid var(--gray-200);
-        }
-        
-        .result-status {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-weight: 600;
-          font-size: 1.1rem;
-        }
-        
-        .success-icon {
-          color: var(--secondary-color);
-        }
-        
-        .failure-icon {
-          color: var(--danger-color);
-        }
-        
-        .execution-time {
-          display: flex;
-          align-items: center;
-          gap: 0.35rem;
-          font-size: 0.85rem;
-          color: var(--gray-500);
-          background-color: var(--gray-100);
-          padding: 0.25rem 0.5rem;
-          border-radius: var(--radius-md);
-        }
-        
-        .test-results {
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-        }
-        
-        .test-case {
-          background-color: var(--gray-50);
-          border-radius: var(--radius-md);
-          overflow: hidden;
-        }
-        
-        .test-header {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.75rem 1rem;
-          font-weight: 500;
-        }
-        
-        .test-case.passed .test-header {
-          background-color: rgba(16, 185, 129, 0.1);
-          color: var(--secondary-dark);
-        }
-        
-        .test-case.failed .test-header {
-          background-color: rgba(239, 68, 68, 0.1);
-          color: var(--danger-color);
-        }
-        
-        .test-icon {
-          flex-shrink: 0;
-        }
-        
-        .test-details {
-          padding: 1rem;
-          border-top: 1px solid var(--gray-200);
-        }
-        
-        .test-io {
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-        }
-        
-        .test-input,
-        .test-expected,
-        .test-output {
-          padding: 0.75rem;
-          background-color: white;
-          border: 1px solid var(--gray-200);
-          border-radius: var(--radius-sm);
-        }
-        
-        .test-output {
-          border-left-color: var(--danger-color);
-          border-left-width: 3px;
-        }
-        
-        .error-messages {
-          margin-top: 1rem;
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-        }
-        
-        .error-message {
-          display: flex;
-          align-items: flex-start;
-          gap: 0.5rem;
-          background-color: rgba(239, 68, 68, 0.1);
-          padding: 0.75rem 1rem;
-          border-radius: var(--radius-md);
-          color: var(--danger-color);
-          font-family: Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-          font-size: 0.9rem;
-          line-height: 1.5;
-        }
-        
-        .error-message svg {
-          margin-top: 0.2rem;
-          flex-shrink: 0;
-        }
-        
-        .error-line {
-          font-weight: 600;
-        }
-        
-        .hints-list {
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-        }
-        
-        .hint {
-          background-color: var(--gray-50);
-          border-radius: var(--radius-md);
-          overflow: hidden;
-        }
-        
-        .hint.error {
-          border-left: 3px solid var(--danger-color);
-        }
-        
-        .hint.warning {
-          border-left: 3px solid var(--warning-color);
-        }
-        
-        .hint.normal {
-          border-left: 3px solid var(--primary-color);
-        }
-        
-        .hint-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 0.75rem 1rem;
-          background-color: var(--gray-100);
-          font-size: 0.9rem;
-        }
-        
-        .hint-level {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-weight: 500;
-          color: var(--gray-700);
-        }
-        
-        .hint-time {
-          color: var(--gray-500);
-          font-size: 0.85rem;
-        }
-        
-        .hint-content {
-          padding: 1rem;
-          line-height: 1.6;
-        }
-        
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        
-        @media (max-width: 768px) {
-          .problem-header-top {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 0.5rem;
-          }
-          
-          .problem-meta {
-            width: 100%;
-          }
-          
-          .split-pane {
-            flex-direction: column;
-          }
-          
-          .problem-description-panel {
-            flex: 0 0 auto;
-            max-height: 50vh;
-            border-right: none;
-            border-bottom: 1px solid var(--gray-200);
-          }
-          
-          .resize-handle {
-            height: 8px;
-            width: 100%;
-            cursor: row-resize;
-          }
-          
-          .editor-header {
-            flex-direction: column;
-            gap: 1rem;
-          }
-          
-          .language-selector,
-          .solution-actions {
-            width: 100%;
-          }
-          
-          .solution-actions {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-          }
-        }
-      `}</style>
 
-      {/* Script for resize handle and tab functionality */}
-      {/* Note: In a real implementation, this would be handled with useEffect */}
-      
+        {/* Panel Dragger Handle with a neon glowing lightbar */}
+        <div 
+          className="hidden md:flex w-[6px] hover:w-[8px] cursor-col-resize select-none bg-[var(--bg-base)] border-x border-[var(--border)]/50 z-20 transition-all items-center justify-center group"
+          onMouseDown={startResize}
+        >
+          <div className="w-[1.5px] h-8 bg-slate-700 rounded-full group-hover:bg-indigo-500 group-hover:h-12 group-hover:shadow-[0_0_6px_#6366f1] transition-all duration-300" />
+        </div>
+
+        {/* Right Editor Column */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-[var(--bg-base)]">
+          
+          {/* Monaco Editor Toolbar */}
+          <div className="bg-[var(--bg-surface)]/45 border-b border-[var(--border)] px-4 py-2 flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-3 select-none">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Compiler</span>
+              <select
+                className="px-2.5 py-1 bg-[var(--bg-base)] border border-[var(--border)] rounded-lg text-[10px] font-bold text-slate-400 focus:outline-none focus:border-indigo-500/40 cursor-pointer uppercase"
+                value={language}
+                onChange={(e) => handleLanguageChange(e.target.value)}
+              >
+                <option value="javascript">JavaScript</option>
+                <option value="python">Python</option>
+                <option value="java">Java</option>
+                <option value="cpp">C++</option>
+              </select>
+
+              {/* Reset Code template button */}
+              <button
+                onClick={handleResetCode}
+                className="p-1 rounded hover:bg-[#161b22] text-slate-500 hover:text-red-400 transition-colors focus:outline-none"
+                title="Reset boilerplate template"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={runCode}
+                disabled={loadingRun}
+                className="px-3.5 py-1.5 bg-[var(--bg-surface)] hover:bg-slate-800 text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border)] rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all inline-flex items-center gap-1.5 disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <polygon points="5 3 19 12 5 21 5 3" strokeWidth={2.5} />
+                </svg>
+                <span>Run</span>
+              </button>
+              
+              <button
+                onClick={submitSolution}
+                disabled={loadingRun}
+                className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all inline-flex items-center gap-1.5 shadow-md shadow-indigo-500/10 disabled:opacity-50 active:scale-[0.98] focus:outline-none focus:ring-1 focus:ring-indigo-400/40"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>Submit</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Monaco wrapper */}
+          <div className="flex-1 min-h-0 bg-[var(--bg-base)]">
+            <MonacoEditor
+              value={code}
+              onChange={setCode}
+              language={language}
+              theme="vs-dark"
+            />
+          </div>
+
+          {/* Terminal output drawer */}
+          <div className={`border-t border-[var(--border)] bg-[var(--bg-base)] flex flex-col transition-all duration-300 ${
+            isTerminalOpen ? 'h-72' : 'h-10'
+          }`}>
+            {/* Terminal toggle bar */}
+            <div className="bg-[var(--bg-surface)]/45 border-b border-[var(--border)]/25 flex items-center justify-between flex-shrink-0 select-none">
+              <div 
+                onClick={() => setIsTerminalOpen(!isTerminalOpen)}
+                className="px-4 py-2.5 flex items-center gap-2 cursor-pointer text-[10px] font-bold text-slate-500 uppercase tracking-widest hover:bg-slate-900/10 flex-1"
+              >
+                <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                <span>Console</span>
+              </div>
+              
+              {isTerminalOpen && (
+                <div className="flex pr-2 gap-1.5">
+                  <button
+                    onClick={() => setTerminalTab('testcase')}
+                    className={`px-3 py-1.5 text-[9px] font-bold uppercase rounded-lg transition-colors focus:outline-none ${
+                      terminalTab === 'testcase'
+                        ? 'bg-slate-800 text-indigo-400 border border-slate-700'
+                        : 'text-slate-500 hover:text-slate-400'
+                    }`}
+                  >
+                    Testcase
+                  </button>
+                  <button
+                    onClick={() => setTerminalTab('result')}
+                    className={`px-3 py-1.5 text-[9px] font-bold uppercase rounded-lg transition-colors focus:outline-none ${
+                      terminalTab === 'result'
+                        ? 'bg-slate-800 text-indigo-400 border border-slate-700'
+                        : 'text-slate-500 hover:text-slate-400'
+                    }`}
+                  >
+                    Result
+                  </button>
+                </div>
+              )}
+              
+              <div 
+                onClick={() => setIsTerminalOpen(!isTerminalOpen)}
+                className="px-4 py-2.5 cursor-pointer text-slate-500 hover:text-slate-300"
+              >
+                <svg className={`w-3.5 h-3.5 transition-transform ${isTerminalOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Terminal Body */}
+            {isTerminalOpen && (
+              <div className="flex-1 overflow-auto p-5 font-mono text-xs text-slate-400">
+                
+                {terminalTab === 'testcase' && (
+                  <div className="space-y-4">
+                    {problem.tests && problem.tests.length > 0 ? (
+                      problem.tests.map((tc, tcIdx) => (
+                        <div key={tcIdx} className="bg-[var(--bg-surface)]/60 border border-[var(--border)] p-3.5 rounded-2xl space-y-2">
+                          <span className="text-slate-500 font-bold uppercase tracking-wider text-[9px] block">Test Case {tcIdx + 1} Input</span>
+                          <pre className="bg-[var(--bg-base)] border border-[var(--border)] p-2.5 rounded-xl font-mono text-slate-200 overflow-x-auto text-xs">{tc.input}</pre>
+                          <span className="text-slate-500 font-bold uppercase tracking-wider text-[9px] block">Expected Output</span>
+                          <pre className="bg-[var(--bg-base)] border border-[var(--border)] p-2.5 rounded-xl font-mono text-indigo-300 font-bold overflow-x-auto text-xs">{tc.expected}</pre>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-slate-600 text-center py-6">No sample test cases configured.</div>
+                    )}
+                  </div>
+                )}
+
+                {terminalTab === 'result' && (
+                  <div className="space-y-4">
+                    {!runResult && !loadingRun && (
+                      <div className="text-slate-600 text-center py-10">
+                        Console idle. Run or Submit code to trace results.
+                      </div>
+                    )}
+                    
+                    {loadingRun && (
+                      <div className="flex items-center gap-2.5 text-indigo-400 py-4">
+                        <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-indigo-500"></div>
+                        <span>Executing code against verification test cases...</span>
+                      </div>
+                    )}
+
+                    {runResult && !loadingRun && (
+                      <div className="space-y-4 animate-fade-in">
+                        
+                        {/* Execution status */}
+                        <div className="flex items-center justify-between border-b border-[#21262d]/40 pb-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-black tracking-wide uppercase ${
+                              runResult.success ? 'bg-green-500/10 text-green-400 border border-green-500/20 shadow-sm shadow-green-500/5' : 'bg-red-500/10 text-red-400 border border-red-500/20 shadow-sm shadow-red-500/5'
+                            }`}>
+                              {runResult.success ? 'Accepted' : 'Runtime Error'}
+                            </span>
+                            <span className="text-slate-300 font-black uppercase tracking-wider text-[10px]">
+                              {runResult.isSubmission ? 'Submission' : 'Run'} Details
+                            </span>
+                          </div>
+                          
+                          {runResult.execution_time && (
+                            <span className="text-slate-500 text-[10px] font-bold">Runtime: {runResult.execution_time}</span>
+                          )}
+                        </div>
+
+                        {/* Test cases outputs */}
+                        {runResult.results && runResult.results.length > 0 && (
+                          <div className="space-y-3">
+                            {runResult.results.map((tc, tcIdx) => (
+                              <div 
+                                key={tcIdx}
+                                className={`p-3.5 rounded-2xl border ${
+                                  tc.passed 
+                                    ? 'bg-green-500/5 border-green-500/10 text-green-300' 
+                                    : 'bg-red-500/5 border-red-500/10 text-red-300'
+                                }`}
+                              >
+                                <div className="font-bold mb-2 flex items-center gap-1.5 uppercase text-[9px] tracking-wider">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${tc.passed ? 'bg-green-500' : 'bg-red-500'}`} />
+                                  Case {tcIdx + 1}: {tc.passed ? 'Passed' : 'Wrong Answer'}
+                                </div>
+                                
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-[10px] border-t border-[#21262d]/10">
+                                  <div>
+                                    <div className="text-[9px] text-slate-500 font-bold uppercase mb-1">Input:</div>
+                                    <pre className="bg-[var(--bg-base)] border border-[var(--border)] p-2 rounded text-slate-400 overflow-x-auto leading-relaxed">{tc.input}</pre>
+                                  </div>
+                                  <div>
+                                    <div className="text-[9px] text-slate-500 font-bold uppercase mb-1">Expected:</div>
+                                    <pre className="bg-[var(--bg-base)] border border-[var(--border)] p-2 rounded text-slate-400 overflow-x-auto leading-relaxed">{tc.expected}</pre>
+                                  </div>
+                                  <div>
+                                    <div className="text-[9px] text-slate-500 font-bold uppercase mb-1">Your Output:</div>
+                                    <pre className={`bg-[var(--bg-base)] p-2 rounded overflow-x-auto leading-relaxed border ${
+                                      tc.passed ? 'border-[var(--border)] text-slate-200' : 'border-red-500/30 text-red-400 border-l-2 border-l-red-500'
+                                    }`}>{tc.output}</pre>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Compilation Errors list */}
+                        {runResult.errors && runResult.errors.length > 0 && (
+                          <div className="space-y-2">
+                            {runResult.errors.map((err, errIdx) => (
+                              <div 
+                                key={errIdx}
+                                className="bg-red-500/10 border border-red-500/20 p-3.5 rounded-xl text-red-400 flex items-start gap-2.5"
+                              >
+                                <svg className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <circle cx="12" cy="12" r="10" strokeWidth={2} />
+                                  <line x1="12" y1="8" x2="12" y2="12" strokeWidth={2} />
+                                  <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth={2.5} />
+                                </svg>
+                                <div className="text-xs font-bold leading-normal">
+                                  {err.line && <span className="font-black">Line {err.line}: </span>}
+                                  <span>{err.message}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              </div>
+            )}
+          </div>
+
+        </div>
+
+      </div>
+
     </div>
-  )
+  );
 }

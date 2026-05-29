@@ -265,7 +265,7 @@ class HintViewSet(viewsets.ViewSet):
         response_data = {
             'status': 'success' if result['attempt_evaluation']['success'] else 'failed',
             'hint': {
-                'id': hint.id,
+                'id': hint_delivery.id,
                 'content': result['generated_hint'],
                 'level': new_hint_level,
                 'type': new_hint_type
@@ -383,7 +383,7 @@ class HintViewSet(viewsets.ViewSet):
             )
 
             # Create hint delivery
-            HintDelivery.objects.create(
+            hint_delivery = HintDelivery.objects.create(
                 hint=hint,
                 user_id=user_id,
                 attempt=attempt,
@@ -407,7 +407,7 @@ class HintViewSet(viewsets.ViewSet):
             return Response({
                 'should_trigger': True,
                 'hint': {
-                    'id': hint.id,
+                    'id': hint_delivery.id,
                     'content': hint.content,
                     'level': hint.level,
                     'type': hint.hint_type

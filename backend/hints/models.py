@@ -76,6 +76,8 @@ class HintDelivery(models.Model):
     user_id = models.IntegerField(default=0)  # Added default value
     attempt = models.ForeignKey(Attempt, on_delete=models.CASCADE, related_name='hint_deliveries')
     is_auto_triggered = models.BooleanField(default=False)
+    feedback = models.TextField(null=True, blank=True)
+    rating = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

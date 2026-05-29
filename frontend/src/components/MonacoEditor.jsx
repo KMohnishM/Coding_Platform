@@ -5,10 +5,10 @@ export default function MonacoEditor({ value, onChange, language = 'javascript',
   const editorRef = useRef(null);
   const [isMonacoReady, setIsMonacoReady] = useState(typeof window !== 'undefined' && !!window.monaco);
 
-  // Helper to initialize monaco editor when it's available
   const initializeMonaco = () => {
     if (!containerRef.current || !window.monaco || editorRef.current) return;
 
+    // Create Editor with Premium configurations
     editorRef.current = window.monaco.editor.create(containerRef.current, {
       value: value || '',
       language,
@@ -16,12 +16,28 @@ export default function MonacoEditor({ value, onChange, language = 'javascript',
       automaticLayout: true,
       minimap: { enabled: false },
       scrollBeyondLastLine: false,
-      fontSize: 14,
+      fontSize: 13,
+      fontFamily: "'JetBrains Mono', 'Menlo', 'Monaco', 'Consolas', monospace",
+      fontWeight: '500',
+      lineHeight: 20,
       tabSize: 2,
+      cursorBlinking: 'smooth',
+      cursorSmoothCaretAnimation: 'on',
+      cursorWidth: 2,
+      fontLigatures: true,
+      smoothScrolling: true,
+      formatOnPaste: true,
+      formatOnType: true,
+      padding: { top: 12, bottom: 12 },
+      renderLineHighlight: 'all',
+      guides: {
+        bracketPairs: true,
+        indentation: true
+      },
       scrollbar: {
         useShadows: false,
-        verticalScrollbarSize: 8,
-        horizontalScrollbarSize: 8
+        verticalScrollbarSize: 6,
+        horizontalScrollbarSize: 6
       }
     });
 
@@ -31,10 +47,8 @@ export default function MonacoEditor({ value, onChange, language = 'javascript',
   };
 
   useEffect(() => {
-    // If monaco is ready, initialize
     if (isMonacoReady) initializeMonaco();
 
-    // If Monaco isn't available yet, try to detect it periodically (useful when loaded from CDN)
     if (!isMonacoReady) {
       let tries = 0;
       const interval = setInterval(() => {
@@ -68,13 +82,23 @@ export default function MonacoEditor({ value, onChange, language = 'javascript',
     }
   }, [value]);
 
-  // If Monaco isn't ready within the environment, render a textarea fallback
+  // Handle language updates dynamically
+  useEffect(() => {
+    if (editorRef.current && window.monaco) {
+      const model = editorRef.current.getModel();
+      if (model) {
+        window.monaco.editor.setModelLanguage(model, language);
+      }
+    }
+  }, [language]);
+
   if (!isMonacoReady) {
     return (
       <textarea
         value={value || ''}
         onChange={e => onChange && onChange(e.target.value)}
-        style={{ width: '100%', height: height, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}
+        className="w-full h-full bg-[var(--bg-base)] border border-[var(--border)] p-4 text-xs font-mono text-slate-400 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-colors"
+        style={{ resize: 'none' }}
       />
     );
   }

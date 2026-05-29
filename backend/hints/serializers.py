@@ -156,4 +156,4 @@ class HintDeliverySerializer(serializers.ModelSerializer):
     
     class Meta:
         model = HintDelivery
-        fields = ['id', 'hint', 'user_id', 'is_auto_triggered', 'created_at']
+        fields = ['id', 'hint', 'user_id', 'is_auto_triggered', 'feedback', 'rating', 'created_at']
