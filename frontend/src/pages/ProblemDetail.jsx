@@ -10,7 +10,7 @@ const capitalizeFirst = (str) => {
   return str.charAt(0).toUpperCase() + str.slice(1);
 };
 
-export default function ProblemDetail({ user }) {
+export default function ProblemDetail({ user, theme }) {
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -89,16 +89,30 @@ export default function ProblemDetail({ user }) {
   };
 
   const getDefaultStartingCode = (lang, title) => {
-    const fnName = title ? title.toLowerCase().replace(/[^a-zA-Z0-9]/g, '') : 'solve';
+    const fnName = title ? title.toLowerCase().replace(/[^a-zA-Z0-9]/g, '').slice(0, 30) : 'solve';
+    const camelName = fnName.charAt(0).toLowerCase() + fnName.slice(1);
+    const pascalName = fnName.charAt(0).toUpperCase() + fnName.slice(1);
     switch (lang) {
       case 'python':
-        return `def ${fnName}(self):\n    # Write your solution here\n    pass`;
+        return `def ${camelName}():\n    # Write your solution here\n    pass`;
       case 'java':
-        return `class Solution {\n    public void ${fnName}() {\n        // Write your solution here\n    }\n}`;
+        return `class Solution {\n    public void ${camelName}() {\n        // Write your solution here\n    }\n}`;
       case 'cpp':
-        return `class Solution {\npublic:\n    void ${fnName}() {\n        // Write your solution here\n    }\n};`;
-      default:
-        return `function ${fnName}() {\n    // Write your solution here\n}`;
+        return `#include <iostream>\n#include <vector>\nusing namespace std;\n\nclass Solution {\npublic:\n    void ${camelName}() {\n        // Write your solution here\n    }\n};`;
+      case 'go':
+        return `package main\n\nimport "fmt"\n\nfunc ${camelName}() {\n\t// Write your solution here\n\tfmt.Println("Hello")\n}`;
+      case 'rust':
+        return `fn ${camelName}() {\n    // Write your solution here\n    println!("Hello");\n}\n\nfn main() {\n    ${camelName}();\n}`;
+      case 'typescript':
+        return `function ${camelName}(): void {\n    // Write your solution here\n}`;
+      case 'csharp':
+        return `using System;\n\nclass Solution {\n    static void ${pascalName}() {\n        // Write your solution here\n    }\n\n    static void Main(string[] args) {\n        ${pascalName}();\n    }\n}`;
+      case 'ruby':
+        return `def ${camelName}\n  # Write your solution here\nend`;
+      case 'kotlin':
+        return `fun ${camelName}() {\n    // Write your solution here\n    println("Hello")\n}\n\nfun main() {\n    ${camelName}()\n}`;
+      default: // javascript
+        return `function ${camelName}() {\n    // Write your solution here\n}`;
     }
   };
 
@@ -679,9 +693,15 @@ export default function ProblemDetail({ user }) {
                 onChange={(e) => handleLanguageChange(e.target.value)}
               >
                 <option value="javascript">JavaScript</option>
+                <option value="typescript">TypeScript</option>
                 <option value="python">Python</option>
                 <option value="java">Java</option>
                 <option value="cpp">C++</option>
+                <option value="go">Go</option>
+                <option value="rust">Rust</option>
+                <option value="csharp">C#</option>
+                <option value="kotlin">Kotlin</option>
+                <option value="ruby">Ruby</option>
               </select>
 
               {/* Reset Code template button */}
@@ -727,7 +747,7 @@ export default function ProblemDetail({ user }) {
               value={code}
               onChange={setCode}
               language={language}
-              theme="vs-dark"
+              theme={theme === 'light' ? 'vs' : 'vs-dark'}
             />
           </div>
 

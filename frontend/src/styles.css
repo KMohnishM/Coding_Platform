@@ -6,11 +6,12 @@
    HintCode — Unified Design System
    ============================================================
    Single source of truth for all global styles.
-   Premium dark-mode first. No duplicate or competing files.
+   Dark-mode default with full light-mode support.
    ============================================================ */
 
-:root {
-  /* ── Core Palette ── */
+/* ── Dark Theme (default) ── */
+:root,
+[data-theme="dark"] {
   --bg-void:     #020408;
   --bg-base:     #030712;
   --bg-surface:  #0b1120;
@@ -21,7 +22,7 @@
   --border-hover: rgba(255,255,255,0.10);
   --border-focus: rgba(99,102,241,0.5);
 
-  /* ── Brand ── */
+  /* Brand */
   --accent:       #6366f1;
   --accent-glow:  rgba(99,102,241,0.15);
   --accent-hover: #4f46e5;
@@ -31,16 +32,16 @@
   --amber:        #f59e0b;
   --rose:         #f43f5e;
 
-  /* ── Text ── */
+  /* Text */
   --text-primary:   #f0f6fc;
   --text-secondary: #8b949e;
   --text-muted:     #484f58;
 
-  /* ── Type ── */
+  /* Type */
   --font-sans:  'Plus Jakarta Sans', 'Inter', -apple-system, system-ui, sans-serif;
   --font-mono:  'JetBrains Mono', 'Fira Code', Menlo, monospace;
 
-  /* ── Radius ── */
+  /* Radius */
   --radius-sm:   8px;
   --radius-md:   12px;
   --radius-lg:   16px;
@@ -48,16 +49,79 @@
   --radius-2xl:  24px;
   --radius-full: 9999px;
 
-  /* ── Shadows ── */
+  /* Shadows */
   --shadow-sm:  0 1px 3px rgba(0,0,0,0.5);
   --shadow-md:  0 4px 20px -2px rgba(0,0,0,0.6);
   --shadow-lg:  0 10px 40px -10px rgba(0,0,0,0.8);
   --shadow-glow: 0 0 20px -5px var(--accent-glow);
 
-  /* ── Difficulty ── */
+  /* Difficulty */
   --easy:   #10b981;
   --medium: #f59e0b;
   --hard:   #ef4444;
+
+  /* Nav */
+  --nav-bg: rgba(3, 7, 18, 0.80);
+  --nav-dropdown: rgba(17, 24, 39, 0.95);
+
+  /* Overlay */
+  --grid-line:  rgba(255, 255, 255, 0.012);
+  --dot-color:  rgba(255, 255, 255, 0.025);
+  --scrollbar:  rgba(255, 255, 255, 0.08);
+  --scrollbar-hover: rgba(255, 255, 255, 0.15);
+  --selection:  rgba(99, 102, 241, 0.3);
+  --glass-bg:   rgba(11, 17, 32, 0.65);
+}
+
+/* ── Light Theme ── */
+[data-theme="light"] {
+  --bg-void:     #f8fafc;
+  --bg-base:     #ffffff;
+  --bg-surface:  #f1f5f9;
+  --bg-elevated: #e2e8f0;
+  --bg-input:    #f8fafc;
+
+  --border:      rgba(0, 0, 0, 0.08);
+  --border-hover: rgba(0, 0, 0, 0.15);
+  --border-focus: rgba(99,102,241,0.5);
+
+  /* Brand */
+  --accent:       #4f46e5;
+  --accent-glow:  rgba(79,70,229,0.12);
+  --accent-hover: #4338ca;
+  --accent-light: #6366f1;
+
+  --emerald:      #059669;
+  --amber:        #d97706;
+  --rose:         #e11d48;
+
+  /* Text */
+  --text-primary:   #0f172a;
+  --text-secondary: #64748b;
+  --text-muted:     #94a3b8;
+
+  /* Shadows — lighter */
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md:  0 4px 20px -2px rgba(0,0,0,0.08);
+  --shadow-lg:  0 10px 40px -10px rgba(0,0,0,0.12);
+  --shadow-glow: 0 0 20px -5px var(--accent-glow);
+
+  /* Difficulty */
+  --easy:   #059669;
+  --medium: #d97706;
+  --hard:   #dc2626;
+
+  /* Nav */
+  --nav-bg: rgba(255, 255, 255, 0.85);
+  --nav-dropdown: rgba(255, 255, 255, 0.97);
+
+  /* Overlay */
+  --grid-line:  rgba(0, 0, 0, 0.03);
+  --dot-color:  rgba(0, 0, 0, 0.04);
+  --scrollbar:  rgba(0, 0, 0, 0.10);
+  --scrollbar-hover: rgba(0, 0, 0, 0.20);
+  --selection:  rgba(99, 102, 241, 0.2);
+  --glass-bg:   rgba(241, 245, 249, 0.75);
 }
 
 /* ── Reset ── */
@@ -83,6 +147,7 @@ body {
   color: var(--text-primary);
   min-height: 100vh;
   overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 #root {
@@ -112,8 +177,8 @@ pre, code {
 
 /* ── Selection ── */
 ::selection {
-  background-color: rgba(99, 102, 241, 0.3);
-  color: #fff;
+  background-color: var(--selection);
+  color: var(--text-primary);
 }
 
 /* ── Scrollbar ── */
@@ -125,11 +190,11 @@ pre, code {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.08);
+  background: var(--scrollbar);
   border-radius: var(--radius-full);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255,255,255,0.15);
+  background: var(--scrollbar-hover);
 }
 
 /* ── Form Elements ── */
@@ -157,8 +222,8 @@ input:focus, select:focus, textarea:focus {
   inset: 0;
   background-size: 60px 60px;
   background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.012) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.012) 1px, transparent 1px);
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
   z-index: -20;
   pointer-events: none;
 }
@@ -166,7 +231,7 @@ input:focus, select:focus, textarea:focus {
 .bg-dot-overlay {
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 0);
+  background-image: radial-gradient(var(--dot-color) 1px, transparent 0);
   background-size: 24px 24px;
   z-index: -25;
   pointer-events: none;
@@ -187,7 +252,7 @@ input:focus, select:focus, textarea:focus {
 
 /* ── Utility: Frosted Glass ── */
 .glass {
-  background: rgba(11, 17, 32, 0.65);
+  background: var(--glass-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border);
@@ -210,6 +275,67 @@ input:focus, select:focus, textarea:focus {
   border-radius: var(--radius-md);
   overflow: hidden;
 }
+
+/* ── Theme Toggle ── */
+.theme-toggle {
+  position: relative;
+  width: 52px;
+  height: 28px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: none;
+  outline: none;
+  padding: 0;
+}
+.theme-toggle[data-active="dark"] {
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.4), 0 0 8px rgba(99,102,241,0.15);
+}
+.theme-toggle[data-active="light"] {
+  background: linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.08), 0 0 8px rgba(96,165,250,0.2);
+}
+.theme-toggle .toggle-knob {
+  position: absolute;
+  top: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.theme-toggle[data-active="dark"] .toggle-knob {
+  left: 3px;
+  background: linear-gradient(135deg, #312e81 0%, #4338ca 100%);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+.theme-toggle[data-active="light"] .toggle-knob {
+  left: 27px;
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  box-shadow: 0 1px 6px rgba(245,158,11,0.4);
+}
+.theme-toggle .toggle-knob svg {
+  width: 13px;
+  height: 13px;
+}
+.theme-toggle[data-active="dark"] .toggle-knob svg {
+  color: #a5b4fc;
+}
+.theme-toggle[data-active="light"] .toggle-knob svg {
+  color: #fff;
+}
+
+/* ── Light theme overrides for Tailwind dark classes ── */
+[data-theme="light"] .text-white { color: #0f172a; }
+[data-theme="light"] .text-slate-100 { color: #1e293b; }
+[data-theme="light"] .text-slate-200 { color: #334155; }
+[data-theme="light"] .text-slate-300 { color: #475569; }
+[data-theme="light"] .bg-gray-950\/80 { background-color: var(--nav-bg); }
+[data-theme="light"] .bg-gray-900\/95 { background-color: var(--nav-dropdown); }
+[data-theme="light"] .bg-gray-950\/95 { background-color: var(--nav-dropdown); }
 
 /* ── Responsive ── */
 @media (max-width: 768px) {

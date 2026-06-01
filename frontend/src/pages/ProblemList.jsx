@@ -269,7 +269,8 @@ export default function ProblemList() {
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-[var(--border)] select-none bg-[var(--bg-surface)]/60">
-                  <th className="py-4 px-6 w-16 text-center text-xs uppercase tracking-wider text-slate-500 font-medium">Status</th>
+                  <th className="py-4 pl-6 pr-2 w-12 text-xs uppercase tracking-wider text-slate-500 font-medium">#</th>
+                  <th className="py-4 px-3 w-14 text-center text-xs uppercase tracking-wider text-slate-500 font-medium">Status</th>
                   <th 
                     onClick={() => handleSort('title')}
                     className="py-4 px-4 min-w-[200px] cursor-pointer hover:bg-slate-800/40 transition-colors group/header text-xs uppercase tracking-wider text-slate-500 font-medium"
@@ -296,25 +297,33 @@ export default function ProblemList() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--border)]/50 font-medium">
+              <tbody className="font-medium">
                 {currentProblems.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-16 text-center text-slate-500 font-bold uppercase tracking-widest text-[10px]">
+                    <td colSpan={6} className="py-16 text-center text-slate-500 font-bold uppercase tracking-widest text-[10px]">
                       No coding challenges match your search filters.
                     </td>
                   </tr>
                 ) : (
-                  currentProblems.map((problem) => {
+                  currentProblems.map((problem, index) => {
                     const solved = isSolved(problem);
+                    const rowNum = (currentPage - 1) * itemsPerPage + index + 1;
                     return (
                       <tr 
                         key={problem.id}
                         role="button"
                         onClick={() => navigate(`/problems/${problem.id}`)}
-                        className="hover:bg-white/[0.02] border-l-2 border-l-transparent hover:border-l-indigo-500 cursor-pointer transition-all duration-300 group"
+                        className={`border-l-2 border-l-transparent hover:border-l-indigo-500 cursor-pointer transition-all duration-200 group ${
+                          index % 2 === 0 ? 'bg-transparent' : 'bg-white/[0.01]'
+                        } hover:bg-white/[0.03]`}
                       >
+                        {/* Row Number */}
+                        <td className="py-3.5 pl-6 pr-2 text-xs text-slate-600 font-mono tabular-nums">
+                          {rowNum}
+                        </td>
+
                         {/* Status Checkmark */}
-                        <td className="py-3.5 px-6 text-center">
+                        <td className="py-3.5 px-3 text-center">
                           {solved ? (
                             <div className="w-5 h-5 rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center text-green-400 mx-auto shadow-sm shadow-green-500/5">
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">

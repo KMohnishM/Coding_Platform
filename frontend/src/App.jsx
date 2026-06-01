@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import TopicsHome from './pages/TopicsHome'
 import TopicProblems from './pages/TopicProblems'
@@ -10,6 +10,21 @@ import authService from './services/authService'
 
 export default function App() {
   const [user, setUser] = useState(() => authService.getUser())
+
+  /* ── Theme: persisted in localStorage, applied to <html> ── */
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('hintcode-theme')
+    return saved || 'dark'
+  })
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('hintcode-theme', theme)
+  }, [theme])
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark')
+  }, [])
 
   const handleSignIn = (userData) => {
     setUser(userData)
@@ -23,16 +38,16 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-[var(--bg-base)] text-slate-100 flex flex-col font-sans antialiased">
+      <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] flex flex-col font-sans antialiased transition-colors duration-300">
         {user ? (
           <>
-            <Navbar user={user} onSignOut={handleSignOut} />
+            <Navbar user={user} onSignOut={handleSignOut} theme={theme} onToggleTheme={toggleTheme} />
             <main className="flex-1 flex flex-col overflow-hidden">
               <Routes>
                 <Route path="/" element={<TopicsHome />} />
                 <Route path="/topics/:topicName" element={<TopicProblems />} />
                 <Route path="/problems" element={<ProblemList />} />
-                <Route path="/problems/:id" element={<ProblemDetail user={user} />} />
+                <Route path="/problems/:id" element={<ProblemDetail user={user} theme={theme} />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </main>
