@@ -4,6 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Count
 from django.utils import timezone
+from django.core.cache import cache
 from datetime import timedelta
 import logging
 import json
@@ -49,19 +50,60 @@ class ProblemViewSet(viewsets.ReadOnlyModelViewSet):
         if self.action == 'retrieve':
             return ProblemDetailSerializer
         return ProblemSerializer
-    
+
+    def list(self, request, *args, **kwargs):
+        """
+        List problems with caching (5 minutes).
+        Cache key is built from query parameters.
+        """
+        topic = request.query_params.get('topic', '')
+        difficulty = request.query_params.get('difficulty', '')
+        search = request.query_params.get('search', '')
+        cache_key = f'problems_list:topic={topic}:difficulty={difficulty}:search={search}'
+
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            return Response(cached_data)
+
+        response = super().list(request, *args, **kwargs)
+        cache.set(cache_key, response.data, timeout=300)  # 5 minutes
+        return response
+
+    def retrieve(self, request, *args, **kwargs):
+        """
+        Retrieve a single problem with caching (30 minutes).
+        """
+        problem_id = kwargs.get('pk')
+        cache_key = f'problem_detail:{problem_id}'
+
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            return Response(cached_data)
+
+        response = super().retrieve(request, *args, **kwargs)
+        cache.set(cache_key, response.data, timeout=1800)  # 30 minutes
+        return response
+
     @action(detail=False, methods=['get'])
     def topics(self, request):
         """
-        Get all available topics.
+        Get all available topics with caching (10 minutes).
         """
+        cache_key = 'problem_topics'
+
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            return Response(cached_data)
+
         # Group by topic and count problems
         topics = Problem.objects.values('topic').annotate(count=Count('id')).order_by('topic')
-        
-        return Response([
+
+        data = [
             {
                 'name': topic['topic'],
                 'count': topic['count']
             }
             for topic in topics if topic['topic']
-        ])
+        ]
+        cache.set(cache_key, data, timeout=600)  # 10 minutes
+        return Response(data)

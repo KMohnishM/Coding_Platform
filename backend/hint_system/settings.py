@@ -161,6 +161,29 @@ CHANNEL_LAYERS = {
     }
 }
 
+# Cache Configuration
+# Uses Redis if REDIS_URL is set, otherwise falls back to in-memory cache
+REDIS_URL = os.getenv('REDIS_URL', '')
+if REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL,
+            'OPTIONS': {
+                'db': '0',
+            },
+            'TIMEOUT': 300,  # 5 minute default timeout
+        }
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'hintcode-cache',
+            'TIMEOUT': 300,
+        }
+    }
+
 # Logging configuration
 LOGGING = {
     'version': 1,

@@ -92,13 +92,20 @@ export default function MonacoEditor({ value, onChange, language = 'javascript',
     }
   }, [language]);
 
+  // Handle theme updates dynamically
+  useEffect(() => {
+    if (editorRef.current && window.monaco) {
+      window.monaco.editor.setTheme(theme);
+    }
+  }, [theme]);
+
   if (!isMonacoReady) {
     return (
       <textarea
         value={value || ''}
         onChange={e => onChange && onChange(e.target.value)}
-        className="w-full h-full bg-[var(--bg-base)] border border-[var(--border)] p-4 text-xs font-mono text-slate-400 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-colors"
-        style={{ resize: 'none' }}
+        className="w-full h-full bg-[var(--bg-base)] border border-[var(--border)] p-4 text-xs font-mono text-[var(--text-secondary)] focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-colors"
+        style={{ resize: 'none', color: 'var(--text-primary)' }}
       />
     );
   }
