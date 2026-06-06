@@ -17,6 +17,8 @@ export default function ProblemDetail({ user, theme }) {
   // Refs for resizable split pane
   const splitContainerRef = useRef(null);
   const isResizing = useRef(false);
+  const isConsoleResizing = useRef(false);
+  const editorPanelRef = useRef(null);
 
   // States
   const [problem, setProblem] = useState(null);
@@ -25,17 +27,20 @@ export default function ProblemDetail({ user, theme }) {
   const [loadingHint, setLoadingHint] = useState(false);
   const [loadingProblem, setLoadingProblem] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('description'); // 'description', 'hints', 'submissions'
-  const [leftWidth, setLeftWidth] = useState(45); // percentage width for left panel
+  const [activeTab, setActiveTab] = useState('description');
+  const [leftWidth, setLeftWidth] = useState(33);
   const [language, setLanguage] = useState('javascript');
-  const [editorCodes, setEditorCodes] = useState({}); // cached code per language: { javascript: '...', python: '...' }
+  const [editorCodes, setEditorCodes] = useState({});
   const [runResult, setRunResult] = useState(null);
   const [loadingRun, setLoadingRun] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
-  const [terminalTab, setTerminalTab] = useState('result'); // 'testcase', 'result'
-  const [hintRatings, setHintRatings] = useState({}); // { hintId: rating }
+  const [consoleHeight, setConsoleHeight] = useState(250);
+  const [terminalTab, setTerminalTab] = useState('result');
+  const [hintRatings, setHintRatings] = useState({});
   const [localSubmissions, setLocalSubmissions] = useState([]);
-  const [hoverStar, setHoverStar] = useState({}); // { hintId: starVal }
+  const [hoverStar, setHoverStar] = useState({});
+  const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(true);
 
   useEffect(() => {
     loadProblemDetails();
@@ -121,7 +126,7 @@ export default function ProblemDetail({ user, theme }) {
     if (!isResizing.current || !splitContainerRef.current) return;
     const containerRect = splitContainerRef.current.getBoundingClientRect();
     const newWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
-    if (newWidth > 20 && newWidth < 80) {
+    if (newWidth > 20 && newWidth < 45) {
       setLeftWidth(newWidth);
     }
   }, []);
@@ -141,6 +146,33 @@ export default function ProblemDetail({ user, theme }) {
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
   }, [handleResize, stopResize]);
+
+  // ── Console vertical resize handlers ──
+  const handleConsoleResize = useCallback((e) => {
+    if (!isConsoleResizing.current || !editorPanelRef.current) return;
+    const panelRect = editorPanelRef.current.getBoundingClientRect();
+    const newHeight = panelRect.bottom - e.clientY;
+    if (newHeight > 40 && newHeight < panelRect.height * 0.7) {
+      setConsoleHeight(newHeight);
+    }
+  }, []);
+
+  const stopConsoleResize = useCallback(() => {
+    isConsoleResizing.current = false;
+    document.removeEventListener('mousemove', handleConsoleResize);
+    document.removeEventListener('mouseup', stopConsoleResize);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }, [handleConsoleResize]);
+
+  const startConsoleResize = useCallback((e) => {
+    e.preventDefault();
+    isConsoleResizing.current = true;
+    document.addEventListener('mousemove', handleConsoleResize);
+    document.addEventListener('mouseup', stopConsoleResize);
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+  }, [handleConsoleResize, stopConsoleResize]);
 
   // Handle language updates with template caching
   const handleLanguageChange = (newLang) => {
@@ -224,9 +256,9 @@ export default function ProblemDetail({ user, theme }) {
     try {
       setLoadingRun(true);
       const result = await codeService.runCode(
-        user.id,
-        problem.problem_id || problem.id,
-        code,
+        user?.id || 1,
+        problem?.problem_id || problem?.id || 1,
+        code || '\n',
         language
       );
       setRunResult(result);
@@ -255,11 +287,11 @@ export default function ProblemDetail({ user, theme }) {
     setIsTerminalOpen(true);
     setTerminalTab('result');
     try {
-      setLoadingRun(true);
+      setIsSubmitting(true);
       const result = await codeService.submitSolution(
-        user.id,
-        problem.problem_id || problem.id,
-        code,
+        user?.id || 1,
+        problem?.problem_id || problem?.id || 1,
+        code || '\n',
         language
       );
       setRunResult({
@@ -283,7 +315,7 @@ export default function ProblemDetail({ user, theme }) {
         isSubmission: true
       });
     } finally {
-      setLoadingRun(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -444,7 +476,7 @@ export default function ProblemDetail({ user, theme }) {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-[var(--bg-base)] h-full overflow-hidden" ref={splitContainerRef}>
+    <div className="flex-1 flex flex-col bg-[var(--bg-base)] h-full min-h-0 overflow-hidden" ref={splitContainerRef}>
       
       {/* Workspace Header */}
       <div className="bg-[var(--bg-surface)]/80 border-b border-[var(--border)] px-4 py-2.5 flex items-center justify-between flex-shrink-0">
@@ -457,9 +489,23 @@ export default function ProblemDetail({ user, theme }) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
+          {/* Sidebar Toggle */}
+          <button
+            onClick={() => setIsLeftPanelOpen(prev => !prev)}
+            className={`p-1.5 rounded-lg transition-all duration-200 focus:outline-none focus:ring-1 focus:ring-indigo-500/30 ${
+              isLeftPanelOpen
+                ? 'text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-slate-800/60'
+            }`}
+            title={isLeftPanelOpen ? 'Hide description panel' : 'Show description panel'}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+            </svg>
+          </button>
           <span className="text-[10px] font-bold text-[#8b949e] uppercase tracking-widest">Workspace</span>
           <span className="text-slate-600 font-medium">/</span>
-          <h2 className="text-sm font-bold text-white truncate max-w-[200px] sm:max-w-[400px]">
+          <h2 className="text-sm font-bold text-[var(--text-primary)] truncate max-w-[200px] sm:max-w-[400px]">
             {problem.title}
           </h2>
         </div>
@@ -475,12 +521,14 @@ export default function ProblemDetail({ user, theme }) {
       </div>
 
       {/* Main Split Panels */}
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative min-h-0">
         
-        {/* Left Description Column */}
+        {/* Left Description Column — Collapsible */}
         <div 
-          className="flex flex-col bg-[var(--bg-surface)]/15 border-r border-[var(--border)] overflow-hidden"
-          style={{ width: `${leftWidth}%` }}
+          className={`flex flex-col min-h-0 bg-[var(--bg-surface)]/15 border-r border-[var(--border)] overflow-hidden transition-all duration-300 ease-in-out ${
+            isLeftPanelOpen ? '' : 'w-0 min-w-0 border-r-0'
+          }`}
+          style={isLeftPanelOpen ? { width: `${leftWidth}%`, flexShrink: 0 } : { width: 0 }}
         >
           {/* Tabs bar */}
           <div className="flex bg-[var(--bg-surface)]/50 border-b border-[var(--border)] px-4 flex-shrink-0 select-none">
@@ -527,7 +575,7 @@ export default function ProblemDetail({ user, theme }) {
           </div>
 
           {/* Scroll Content Area */}
-          <div className="flex-1 overflow-auto p-5 space-y-6">
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 space-y-4 scrollbar-thin">
             
             {activeTab === 'description' && (
               <div className="prose prose-invert max-w-none text-[#8b949e] text-xs leading-relaxed space-y-4">
@@ -672,16 +720,34 @@ export default function ProblemDetail({ user, theme }) {
           </div>
         </div>
 
-        {/* Panel Dragger Handle with a neon glowing lightbar */}
+        {/* Panel Dragger Handle — hidden when sidebar collapsed */}
         <div 
-          className="hidden md:flex w-[6px] hover:w-[8px] cursor-col-resize select-none bg-[var(--bg-base)] border-x border-[var(--border)]/50 z-20 transition-all items-center justify-center group"
-          onMouseDown={startResize}
+          className="hidden md:flex w-[12px] hover:w-[16px] cursor-col-resize select-none bg-[var(--bg-base)] border-x border-[var(--border)]/50 z-20 transition-all items-center justify-center group relative"
+          onMouseDown={isLeftPanelOpen ? startResize : undefined}
         >
-          <div className="w-[1.5px] h-8 bg-slate-700 rounded-full group-hover:bg-indigo-500 group-hover:h-12 group-hover:shadow-[0_0_6px_#6366f1] transition-all duration-300" />
+          {isLeftPanelOpen ? (
+            <div className="w-[2px] h-8 bg-slate-700 rounded-full group-hover:bg-indigo-500 group-hover:h-12 group-hover:shadow-[0_0_8px_#6366f1] transition-all duration-300" />
+          ) : (
+            <div className="w-[2px] h-full bg-indigo-500/30 group-hover:bg-indigo-500 transition-all duration-300" />
+          )}
+
+          {/* Toggle Button embedded in the dragger */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsLeftPanelOpen(!isLeftPanelOpen);
+            }}
+            className="absolute top-1/2 -translate-y-1/2 -left-[14px] bg-[var(--bg-surface)] border border-[var(--border)] text-slate-400 hover:text-indigo-400 p-1 rounded-l-md rounded-r-none shadow-md z-30 focus:outline-none opacity-0 group-hover:opacity-100 transition-opacity"
+            title={isLeftPanelOpen ? 'Collapse Panel' : 'Expand Panel'}
+          >
+            <svg className={`w-3.5 h-3.5 transition-transform ${isLeftPanelOpen ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
         </div>
 
         {/* Right Editor Column */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-[var(--bg-base)]">
+        <div className="flex-1 flex flex-col overflow-hidden bg-[var(--bg-base)]" ref={editorPanelRef}>
           
           {/* Monaco Editor Toolbar */}
           <div className="bg-[var(--bg-surface)]/45 border-b border-[var(--border)] px-4 py-2 flex items-center justify-between flex-shrink-0">
@@ -717,26 +783,60 @@ export default function ProblemDetail({ user, theme }) {
             </div>
 
             <div className="flex gap-2">
+              {/* ─── Run Button ─── */}
               <button
                 onClick={runCode}
-                disabled={loadingRun}
-                className="px-3.5 py-1.5 bg-[var(--bg-surface)] hover:bg-slate-800 text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border)] rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all inline-flex items-center gap-1.5 disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+                disabled={loadingRun || isSubmitting}
+                className={`group relative px-4 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all duration-200 inline-flex items-center gap-2 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 ${
+                  loadingRun
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shadow-sm shadow-emerald-500/10'
+                    : 'bg-[var(--bg-surface)] hover:bg-emerald-500/10 text-[var(--text-secondary)] hover:text-emerald-400 border border-[var(--border)] hover:border-emerald-500/30'
+                } disabled:opacity-40`}
               >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <polygon points="5 3 19 12 5 21 5 3" strokeWidth={2.5} />
-                </svg>
-                <span>Run</span>
+                {loadingRun ? (
+                  <>
+                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth={4} />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    <span>Running...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3 h-3 transition-transform group-hover:scale-110" fill="currentColor" viewBox="0 0 24 24">
+                      <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                    <span>Run</span>
+                  </>
+                )}
               </button>
               
+              {/* ─── Submit Button ─── */}
               <button
                 onClick={submitSolution}
-                disabled={loadingRun}
-                className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all inline-flex items-center gap-1.5 shadow-md shadow-indigo-500/10 disabled:opacity-50 active:scale-[0.98] focus:outline-none focus:ring-1 focus:ring-indigo-400/40"
+                disabled={loadingRun || isSubmitting}
+                className={`group relative px-4 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all duration-200 inline-flex items-center gap-2 focus:outline-none disabled:opacity-40 ${
+                  isSubmitting
+                    ? 'bg-gradient-to-r from-indigo-600 to-purple-700 text-white shadow-lg shadow-indigo-500/25 animate-pulse'
+                    : 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-md shadow-indigo-500/10 hover:shadow-indigo-500/25 active:scale-[0.97]'
+                } focus:ring-1 focus:ring-indigo-400/40`}
               >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                </svg>
-                <span>Submit</span>
+                {isSubmitting ? (
+                  <>
+                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth={4} />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    <span>Submitting...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3 h-3 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Submit</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -751,10 +851,20 @@ export default function ProblemDetail({ user, theme }) {
             />
           </div>
 
-          {/* Terminal output drawer */}
-          <div className={`border-t border-[var(--border)] bg-[var(--bg-base)] flex flex-col transition-all duration-300 ${
-            isTerminalOpen ? 'h-72' : 'h-10'
-          }`}>
+          {/* Terminal / Console — draggable height */}
+          <div 
+            className="border-t border-[var(--border)] bg-[var(--bg-base)] flex flex-col"
+            style={{ height: isTerminalOpen ? `${consoleHeight}px` : '40px', flexShrink: 0 }}
+          >
+            {/* Console drag handle — only when open */}
+            {isTerminalOpen && (
+              <div
+                onMouseDown={startConsoleResize}
+                className="h-[5px] cursor-row-resize bg-[var(--bg-base)] hover:bg-indigo-500/20 transition-colors flex items-center justify-center group flex-shrink-0"
+              >
+                <div className="w-10 h-[3px] bg-slate-700/60 rounded-full group-hover:bg-indigo-500 group-hover:shadow-[0_0_6px_#6366f1] transition-all" />
+              </div>
+            )}
             {/* Terminal toggle bar */}
             <div className="bg-[var(--bg-surface)]/45 border-b border-[var(--border)]/25 flex items-center justify-between flex-shrink-0 select-none">
               <div 
@@ -829,14 +939,32 @@ export default function ProblemDetail({ user, theme }) {
                       </div>
                     )}
                     
-                    {loadingRun && (
-                      <div className="flex items-center gap-2.5 text-indigo-400 py-4">
-                        <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-indigo-500"></div>
-                        <span>Executing code against verification test cases...</span>
+                    {(loadingRun || isSubmitting) && (
+                      <div className="py-6 space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className="relative w-5 h-5">
+                            <svg className="w-5 h-5 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth={4} />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <div className="text-indigo-400 font-bold text-xs">
+                              {isSubmitting ? 'Submitting solution...' : 'Running code...'}
+                            </div>
+                            <div className="text-[10px] text-slate-500 mt-0.5">
+                              Compiling &amp; executing {language.toUpperCase()} • Please wait
+                            </div>
+                          </div>
+                        </div>
+                        {/* Animated progress bar */}
+                        <div className="h-1 bg-[var(--bg-surface)] rounded-full overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 rounded-full animate-pulse" style={{ width: '70%', animation: 'pulse 1.5s ease-in-out infinite' }} />
+                        </div>
                       </div>
                     )}
 
-                    {runResult && !loadingRun && (
+                    {runResult && !loadingRun && !isSubmitting && (
                       <div className="space-y-4 animate-fade-in">
                         
                         {/* Execution status */}

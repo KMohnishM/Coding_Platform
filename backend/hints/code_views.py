@@ -137,7 +137,8 @@ class CodeViewSet(viewsets.ViewSet):
         code = request.data.get('code')
         language = request.data.get('language', 'javascript')
 
-        if not all([user_id, problem_id, code]):
+        if user_id is None or problem_id is None or code is None:
+            logger.warning(f"Validation failed. request.data: {request.data}")
             return Response(
                 {'error': 'Missing required fields: user_id, problem_id, code'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -172,7 +173,8 @@ class CodeViewSet(viewsets.ViewSet):
         code = request.data.get('code')
         language = request.data.get('language', 'javascript')
 
-        if not all([user_id, problem_id, code]):
+        if user_id is None or problem_id is None or code is None:
+            logger.warning(f"Validation failed in submit. request.data: {request.data}")
             return Response(
                 {'error': 'Missing required fields: user_id, problem_id, code'},
                 status=status.HTTP_400_BAD_REQUEST

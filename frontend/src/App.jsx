@@ -38,11 +38,11 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] flex flex-col font-sans antialiased transition-colors duration-300">
+      <div className="h-screen bg-[var(--bg-base)] text-[var(--text-primary)] flex flex-col font-sans antialiased transition-colors duration-300 overflow-hidden">
         {user ? (
           <>
             <Navbar user={user} onSignOut={handleSignOut} theme={theme} onToggleTheme={toggleTheme} />
-            <main className="flex-1 flex flex-col overflow-hidden">
+            <main className="flex-1 flex flex-col overflow-hidden min-h-0">
               <Routes>
                 <Route path="/" element={<TopicsHome />} />
                 <Route path="/topics/:topicName" element={<TopicProblems />} />
