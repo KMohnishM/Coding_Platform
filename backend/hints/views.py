@@ -104,7 +104,7 @@ class HintViewSet(viewsets.ViewSet):
             user_id=user_id,
             problem=problem,
             code=user_code,
-            status='failed' if not attempt_evaluation['success'] else 'success',
+            status='failed' if not attempt_evaluation.get('is_correct', False) else 'success',
             evaluation_details=attempt_evaluation
         )
         
@@ -218,13 +218,13 @@ class HintViewSet(viewsets.ViewSet):
             user_id=user_id,
             problem=problem,
             code=user_code,
-            status='failed' if not result['attempt_evaluation']['success'] else 'success',
+            status='failed' if not result['attempt_evaluation'].get('is_correct', False) else 'success',
             evaluation_details=result['attempt_evaluation']
         )
         logger.info(f"📝 Created attempt record (ID: {attempt.id}, Status: {attempt.status})")
 
         # Update failed_attempts_count only if failed, reset on success
-        if not result['attempt_evaluation']['success']:
+        if not result['attempt_evaluation'].get('is_correct', False):
             progress.failed_attempts_count += 1
             logger.info(f"❌ Incremented failed_attempts_count: {progress.failed_attempts_count}")
         else:
@@ -263,7 +263,7 @@ class HintViewSet(viewsets.ViewSet):
 
         # Prepare response in the requested format
         response_data = {
-            'status': 'success' if result['attempt_evaluation']['success'] else 'failed',
+            'status': 'success' if result['attempt_evaluation'].get('is_correct', False) else 'failed',
             'hint': {
                 'id': hint_delivery.id,
                 'content': result['generated_hint'],
@@ -273,10 +273,11 @@ class HintViewSet(viewsets.ViewSet):
             'evaluation': result['hint_evaluation'],
             'attempt_id': attempt.id,
             'attempt_evaluation': {
-                'success': result['attempt_evaluation']['success'],
-                'reason': result['attempt_evaluation']['reason'],
-                'complexity': result['attempt_evaluation']['complexity'],
-                'edge_cases': result['attempt_evaluation']['edge_cases']
+                'is_correct': result['attempt_evaluation'].get('is_correct', False),
+                'error_pattern': result['attempt_evaluation'].get('error_pattern', ''),
+                'conceptual_gap': result['attempt_evaluation'].get('conceptual_gap', ''),
+                'diagnosis_summary': result['attempt_evaluation'].get('diagnosis_summary', ''),
+                'suggestions': result['attempt_evaluation'].get('suggestions', [])
             },
             'user_progress': {
                 'attempts_count': progress.attempts_count,

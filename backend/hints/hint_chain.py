@@ -38,17 +38,17 @@ class HintChain:
                 'description': 'Attempt Evaluation Model'
             },
             'hint_generation': {
-                'model': 'deepseek/deepseek-r1-0528-qwen3-8b:free',
+                'model': 'nvidia/nemotron-3-super-120b-a12b:free',
                 'temperature': 0.7,  # Higher temperature for creative hint generation
                 'description': 'Hint Generation Model'
             },
             'hint_evaluation': {
-                'model': 'deepseek/deepseek-r1-0528-qwen3-8b:free',
+                'model': 'nvidia/nemotron-3-super-120b-a12b:free',
                 'temperature': 0.2,  # Very low temperature for consistent scoring
                 'description': 'Hint Evaluation Model'
             },
             'auto_trigger': {
-                'model': 'deepseek/deepseek-r1-0528-qwen3-8b:free',
+                'model': 'nvidia/nemotron-3-super-120b-a12b:free',
                 'temperature': 0.4,  # Medium temperature for balanced decision making
                 'description': 'Auto-Trigger Decision Model'
             }

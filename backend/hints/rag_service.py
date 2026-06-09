@@ -59,7 +59,7 @@ class RAGService:
         
         # Initialize LLM for RAG-enhanced hint generation
         self.rag_llm = ChatOpenAI(
-            model='deepseek/deepseek-r1-0528-qwen3-8b:free',
+            model='nvidia/nemotron-3-super-120b-a12b:free',
             openai_api_key=self.api_key,
             openai_api_base="https://openrouter.ai/api/v1",
             temperature=0.7

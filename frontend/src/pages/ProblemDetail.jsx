@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { toast } from 'react-hot-toast';
 import { useParams, useNavigate } from 'react-router-dom';
 import MonacoEditor from '../components/MonacoEditor';
 import problemService from '../services/problemService';
 import hintService from '../services/hintService';
 import codeService from '../services/codeService';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 const capitalizeFirst = (str) => {
   if (!str) return '';
@@ -216,7 +221,7 @@ export default function ProblemDetail({ user, theme }) {
     try {
       setLoadingHint(true);
       const result = await hintService.requestHint(
-        user.id,
+        user?.id || 1,
         problem.problem_id || problem.id,
         code,
         {
@@ -270,6 +275,26 @@ export default function ProblemDetail({ user, theme }) {
           solvedList.push(problem.problem_id);
           localStorage.setItem('solvedProblems', JSON.stringify(solvedList));
         }
+      } else {
+        // Failed run: check for auto-trigger
+        try {
+          const autoCheck = await hintService.checkAutoTrigger(
+            user?.id || 1,
+            problem?.problem_id || problem?.id || 1,
+            code || '\n',
+            { title: problem.title, description: problem.description }
+          );
+          if (autoCheck?.should_trigger && autoCheck.hint) {
+            setHints(prev => [autoCheck.hint, ...prev]);
+            toast("You seem stuck! The AI generated a hint for you.", {
+              icon: '💡',
+              style: { borderRadius: '10px', background: '#333', color: '#fff' }
+            });
+            setActiveTab('hints');
+          }
+        } catch (e) {
+          console.error("Auto-trigger error", e);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -305,6 +330,26 @@ export default function ProblemDetail({ user, theme }) {
         if (!solvedList.includes(problem.problem_id)) {
           solvedList.push(problem.problem_id);
           localStorage.setItem('solvedProblems', JSON.stringify(solvedList));
+        }
+      } else {
+        // Failed submit: check for auto-trigger
+        try {
+          const autoCheck = await hintService.checkAutoTrigger(
+            user?.id || 1,
+            problem?.problem_id || problem?.id || 1,
+            code || '\n',
+            { title: problem.title, description: problem.description }
+          );
+          if (autoCheck?.should_trigger && autoCheck.hint) {
+            setHints(prev => [autoCheck.hint, ...prev]);
+            toast("You seem stuck! The AI generated a hint for you.", {
+              icon: '💡',
+              style: { borderRadius: '10px', background: '#333', color: '#fff' }
+            });
+            setActiveTab('hints');
+          }
+        } catch (e) {
+          console.error("Auto-trigger error", e);
         }
       }
     } catch (err) {
@@ -636,9 +681,32 @@ export default function ProblemDetail({ user, theme }) {
                           </span>
                         </div>
                         
-                        <p className="text-slate-300 text-xs leading-relaxed whitespace-pre-line">
-                          {hint.content}
-                        </p>
+                        <div className="text-slate-300 text-xs leading-relaxed overflow-x-auto hint-markdown-content">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              code({node, inline, className, children, ...props}) {
+                                const match = /language-(\w+)/.exec(className || '')
+                                return !inline && match ? (
+                                  <SyntaxHighlighter
+                                    {...props}
+                                    children={String(children).replace(/\n$/, '')}
+                                    style={vscDarkPlus}
+                                    language={match[1]}
+                                    PreTag="div"
+                                    className="rounded-md my-2 text-[11px]"
+                                  />
+                                ) : (
+                                  <code {...props} className="bg-slate-800 text-indigo-300 px-1 py-0.5 rounded text-[10px] font-mono">
+                                    {children}
+                                  </code>
+                                )
+                              }
+                            }}
+                          >
+                            {hint.content}
+                          </ReactMarkdown>
+                        </div>
 
                         {/* Feedback Rating Block with glowing stars */}
                         <div className="pt-3.5 border-t border-[#21262d]/50 flex items-center justify-between text-xs text-slate-400 select-none">
