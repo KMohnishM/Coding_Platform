@@ -57,61 +57,72 @@ class CodeViewSet(viewsets.ViewSet):
         and compares outputs.
         """
         start = time.time()
-
-        # ── Run the code via Piston ──
-        result = self.executor.execute(code, language)
-        elapsed = time.time() - start
-
-        if not result['success'] and result.get('stderr'):
-            # Compilation or runtime error
-            return {
-                'success': False,
-                'results': [],
-                'errors': [{'message': result['stderr'].strip()[:500], 'line': None}],
-                'execution_time': f"{elapsed:.2f}s",
-            }
-
-        # Code ran successfully — build test result output
-        stdout = result.get('stdout', '').strip()
-        output_lines = stdout.split('\n') if stdout else []
-
-        # Extract test cases from the problem's serialized tests if available
         test_cases = self._extract_test_cases(problem)
 
-        if test_cases:
-            test_results = []
-            all_passed = True
-            for i, tc in enumerate(test_cases):
-                actual = output_lines[i].strip() if i < len(output_lines) else ''
-                expected = tc.get('expected', '').strip()
-                passed = actual == expected
-                if not passed:
-                    all_passed = False
-                test_results.append({
-                    'input': tc.get('input', f'Test case {i+1}'),
-                    'expected': expected,
-                    'output': actual or '(no output)',
-                    'passed': passed,
-                })
-            return {
-                'success': all_passed,
-                'results': test_results,
-                'errors': [],
-                'execution_time': f"{elapsed:.2f}s",
-            }
-        else:
-            # No test cases — just show the raw output
+        if not test_cases:
+            # ── Run the code via Piston once with no input ──
+            result = self.executor.execute(code, language)
+            elapsed = time.time() - start
+
+            if not result['success'] and result.get('stderr'):
+                return {
+                    'success': False,
+                    'results': [],
+                    'errors': [{'message': result['stderr'].strip()[:500], 'line': None}],
+                    'execution_time': f"{elapsed:.2f}s",
+                }
+
             return {
                 'success': result['success'],
                 'results': [{
-                    'input': '(user code)',
+                    'input': '(no input)',
                     'expected': '(run mode)',
-                    'output': stdout or '(no output)',
+                    'output': result.get('stdout', '').strip() or '(no output)',
                     'passed': result['success'],
                 }],
                 'errors': [],
                 'execution_time': f"{elapsed:.2f}s",
             }
+
+        # ── Run the code against each test case ──
+        test_results = []
+        all_passed = True
+        total_elapsed = 0
+
+        for i, tc in enumerate(test_cases):
+            tc_input = tc.get('input', '')
+            tc_expected = tc.get('expected', '').strip()
+            
+            result = self.executor.execute(code, language, stdin=tc_input)
+            total_elapsed += result.get('execution_time', 0)
+            
+            if not result['success'] and result.get('stderr'):
+                # Execution failed on this test case (e.g. Runtime Error)
+                return {
+                    'success': False,
+                    'results': test_results,
+                    'errors': [{'message': result['stderr'].strip()[:500], 'line': None}],
+                    'execution_time': f"{total_elapsed:.2f}s",
+                }
+
+            actual = result.get('stdout', '').strip()
+            passed = actual == tc_expected
+            if not passed:
+                all_passed = False
+
+            test_results.append({
+                'input': tc_input,
+                'expected': tc_expected,
+                'output': actual or '(no output)',
+                'passed': passed,
+            })
+
+        return {
+            'success': all_passed,
+            'results': test_results,
+            'errors': [],
+            'execution_time': f"{total_elapsed:.2f}s",
+        }
 
     def _extract_test_cases(self, problem):
         """

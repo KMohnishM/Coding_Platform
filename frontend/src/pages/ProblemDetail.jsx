@@ -99,25 +99,25 @@ export default function ProblemDetail({ user, theme }) {
     const pascalName = fnName.charAt(0).toUpperCase() + fnName.slice(1);
     switch (lang) {
       case 'python':
-        return `def ${camelName}():\n    # Write your solution here\n    pass`;
+        return `def ${camelName}():\n    # Write your solution here\n    pass\n\nif __name__ == '__main__':\n    # Read input and call ${camelName}()\n    pass`;
       case 'java':
-        return `class Solution {\n    public void ${camelName}() {\n        // Write your solution here\n    }\n}`;
+        return `import java.util.Scanner;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        // Read input and print output\n    }\n}`;
       case 'cpp':
-        return `#include <iostream>\n#include <vector>\nusing namespace std;\n\nclass Solution {\npublic:\n    void ${camelName}() {\n        // Write your solution here\n    }\n};`;
+        return `#include <iostream>\n#include <vector>\nusing namespace std;\n\nint main() {\n    // Read input and print output\n    return 0;\n}`;
       case 'go':
-        return `package main\n\nimport "fmt"\n\nfunc ${camelName}() {\n\t// Write your solution here\n\tfmt.Println("Hello")\n}`;
+        return `package main\n\nimport (\n\t"fmt"\n)\n\nfunc main() {\n\t// Read input and print output\n}`;
       case 'rust':
-        return `fn ${camelName}() {\n    // Write your solution here\n    println!("Hello");\n}\n\nfn main() {\n    ${camelName}();\n}`;
+        return `use std::io;\n\nfn main() {\n    // Read input and print output\n}`;
       case 'typescript':
-        return `function ${camelName}(): void {\n    // Write your solution here\n}`;
+        return `import * as fs from 'fs';\n\nfunction main() {\n    const input = fs.readFileSync('/dev/stdin', 'utf-8');\n    // Parse input and print output\n}\n\nmain();`;
       case 'csharp':
-        return `using System;\n\nclass Solution {\n    static void ${pascalName}() {\n        // Write your solution here\n    }\n\n    static void Main(string[] args) {\n        ${pascalName}();\n    }\n}`;
+        return `using System;\n\nclass Program {\n    static void Main(string[] args) {\n        // Read input and print output\n    }\n}`;
       case 'ruby':
-        return `def ${camelName}\n  # Write your solution here\nend`;
+        return `def solve\n  # Read input and print output\nend\n\nsolve()`;
       case 'kotlin':
-        return `fun ${camelName}() {\n    // Write your solution here\n    println("Hello")\n}\n\nfun main() {\n    ${camelName}()\n}`;
+        return `import java.util.Scanner\n\nfun main(args: Array<String>) {\n    val scanner = Scanner(System.` + `in` + `)\n    // Read input and print output\n}`;
       default: // javascript
-        return `function ${camelName}() {\n    // Write your solution here\n}`;
+        return `const fs = require('fs');\n\nfunction main() {\n    const input = fs.readFileSync(0, 'utf-8');\n    // Parse input and print output\n}\n\nmain();`;
     }
   };
 
@@ -847,7 +847,7 @@ export default function ProblemDetail({ user, theme }) {
               value={code}
               onChange={setCode}
               language={language}
-              theme={theme === 'light' ? 'vs' : 'vs-dark'}
+              theme={theme}
             />
           </div>
 

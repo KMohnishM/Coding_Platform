@@ -133,6 +133,7 @@ class ExecutionService:
                 # Execute
                 result = subprocess.run(
                     cmd,
+                    input=stdin,
                     capture_output=True,
                     text=True,
                     timeout=self.TIMEOUT_SECONDS,

@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 
-export default function MonacoEditor({ value, onChange, language = 'javascript', theme = 'vs-dark', height = '100%' }) {
+export default function MonacoEditor({ value, onChange, language = 'javascript', theme = 'dark', height = '100%' }) {
   const containerRef = useRef(null);
   const editorRef = useRef(null);
   const [isMonacoReady, setIsMonacoReady] = useState(typeof window !== 'undefined' && !!window.monaco);

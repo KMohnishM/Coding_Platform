@@ -23,7 +23,8 @@
 **Current state:** `UserProgress` model exists but isn't wired up. Submissions are only stored in localStorage.
 
 - [ ] Wire up `UserProgress` model to track per-problem attempts, completion, and hints used
-- [ ] Store submissions in the database (currently localStorage only)
+- [ ] Create a `history` API endpoint to fetch user attempts from the DB
+- [ ] Connect the frontend History tab to fetch past submissions via the new API instead of `localStorage`
 - [ ] Add user profile page showing stats, heatmap, streak
 - [ ] Add a proper "Solved" marker per problem in the problem lists
 - [ ] Sync solved status from backend instead of localStorage
