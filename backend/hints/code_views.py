@@ -50,13 +50,39 @@ class CodeViewSet(viewsets.ViewSet):
             logger.error(f"Failed to create attempt: {e}")
             return None
 
-    def _execute_code(self, problem, code, language):
+    def _execute_code(self, problem, code, language, custom_input=None):
         """
         Execute code using the Piston API.
         Extracts test cases from the problem description, runs the code,
-        and compares outputs.
+        and compares outputs. If custom_input is provided, it runs only that.
         """
         start = time.time()
+        
+        if custom_input is not None:
+            # ── Run the code against the custom input ──
+            result = self.executor.execute(code, language, stdin=custom_input)
+            elapsed = time.time() - start
+
+            if not result['success'] and result.get('stderr'):
+                return {
+                    'success': False,
+                    'results': [],
+                    'errors': [{'message': result['stderr'].strip()[:500], 'line': None}],
+                    'execution_time': f"{elapsed:.2f}s",
+                }
+
+            return {
+                'success': result['success'],
+                'results': [{
+                    'input': custom_input,
+                    'expected': '(custom)',
+                    'output': result.get('stdout', '').strip() or '(no output)',
+                    'passed': result['success'],
+                }],
+                'errors': [],
+                'execution_time': f"{elapsed:.2f}s",
+            }
+
         test_cases = self._extract_test_cases(problem)
 
         if not test_cases:
@@ -147,6 +173,7 @@ class CodeViewSet(viewsets.ViewSet):
         problem_id = request.data.get('problem_id')
         code = request.data.get('code')
         language = request.data.get('language', 'javascript')
+        custom_input = request.data.get('custom_input')
 
         if user_id is None or problem_id is None or code is None:
             logger.warning(f"Validation failed. request.data: {request.data}")
@@ -162,7 +189,7 @@ class CodeViewSet(viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        execution_result = self._execute_code(problem, code, language)
+        execution_result = self._execute_code(problem, code, language, custom_input)
 
         attempt_status = 'success' if execution_result['success'] else 'failed'
         attempt = self._create_attempt(user_id, problem, code, language, attempt_status)

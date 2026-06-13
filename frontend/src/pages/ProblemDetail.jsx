@@ -46,6 +46,7 @@ export default function ProblemDetail({ user, theme }) {
   const [localSubmissions, setLocalSubmissions] = useState([]);
   const [hoverStar, setHoverStar] = useState({});
   const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(true);
+  const [customInput, setCustomInput] = useState('');
 
   useEffect(() => {
     loadProblemDetails();
@@ -264,7 +265,8 @@ export default function ProblemDetail({ user, theme }) {
         user?.id || 1,
         problem?.problem_id || problem?.id || 1,
         code || '\n',
-        language
+        language,
+        customInput
       );
       setRunResult(result);
       saveLocalSubmission(code, result.success ? 'success' : 'failed', result.execution_time || '0.1s', result);
@@ -965,6 +967,16 @@ export default function ProblemDetail({ user, theme }) {
                   >
                     Result
                   </button>
+                  <button
+                    onClick={() => setTerminalTab('custom_input')}
+                    className={`px-3 py-1.5 text-[9px] font-bold uppercase rounded-lg transition-colors focus:outline-none ${
+                      terminalTab === 'custom_input'
+                        ? 'bg-slate-800 text-indigo-400 border border-slate-700'
+                        : 'text-slate-500 hover:text-slate-400'
+                    }`}
+                  >
+                    Custom Input
+                  </button>
                 </div>
               )}
               
@@ -981,6 +993,18 @@ export default function ProblemDetail({ user, theme }) {
             {/* Terminal Body */}
             {isTerminalOpen && (
               <div className="flex-1 overflow-auto p-5 font-mono text-xs text-slate-400">
+                
+                {terminalTab === 'custom_input' && (
+                  <div className="space-y-4 h-full flex flex-col">
+                    <span className="text-slate-500 font-bold uppercase tracking-wider text-[9px] block">Standard Input (stdin)</span>
+                    <textarea
+                      value={customInput}
+                      onChange={(e) => setCustomInput(e.target.value)}
+                      placeholder="Enter custom input here..."
+                      className="flex-1 bg-[var(--bg-surface)]/60 border border-[var(--border)] p-3.5 rounded-xl font-mono text-slate-200 text-xs focus:outline-none focus:border-indigo-500/50 resize-none w-full min-h-[100px]"
+                    />
+                  </div>
+                )}
                 
                 {terminalTab === 'testcase' && (
                   <div className="space-y-4">

@@ -13,13 +13,17 @@ const codeService = {
    * @param {string} language - The programming language
    * @returns {Promise<Object>} - Promise resolving to execution results
    */
-  runCode: async (userId, problemId, code, language) => {
-    return apiClient.post('/code/run/', {
+  runCode: async (userId, problemId, code, language, customInput = null) => {
+    const payload = {
       user_id: userId,
       problem_id: problemId,
       code,
       language
-    });
+    };
+    if (customInput !== null && customInput !== '') {
+      payload.custom_input = customInput;
+    }
+    return apiClient.post('/code/run/', payload);
   },
   
   /**
