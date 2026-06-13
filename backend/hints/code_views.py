@@ -36,14 +36,17 @@ class CodeViewSet(viewsets.ViewSet):
             logger.warning(f"Problem not found: {problem_id}")
             return None
 
-    def _create_attempt(self, user_id, problem, code, language, exec_status='pending'):
+    def _create_attempt(self, user_id, problem, code, language, exec_status='pending', execution_time=None, evaluation_details=None):
         """Create an attempt record."""
         try:
             attempt = Attempt.objects.create(
                 user_id=user_id,
                 problem=problem,
                 code=code,
+                language=language,
                 status=exec_status,
+                execution_time=execution_time,
+                evaluation_details=evaluation_details,
             )
             return attempt
         except Exception as e:
@@ -192,7 +195,11 @@ class CodeViewSet(viewsets.ViewSet):
         execution_result = self._execute_code(problem, code, language, custom_input)
 
         attempt_status = 'success' if execution_result['success'] else 'failed'
-        attempt = self._create_attempt(user_id, problem, code, language, attempt_status)
+        attempt = self._create_attempt(
+            user_id, problem, code, language, attempt_status,
+            execution_time=execution_result.get('execution_time'),
+            evaluation_details=execution_result
+        )
 
         return Response({
             'success': execution_result['success'],
@@ -228,7 +235,11 @@ class CodeViewSet(viewsets.ViewSet):
         execution_result = self._execute_code(problem, code, language)
 
         attempt_status = 'success' if execution_result['success'] else 'failed'
-        attempt = self._create_attempt(user_id, problem, code, language, attempt_status)
+        attempt = self._create_attempt(
+            user_id, problem, code, language, attempt_status,
+            execution_time=execution_result.get('execution_time'),
+            evaluation_details=execution_result
+        )
 
         return Response({
             'success': execution_result['success'],
@@ -240,3 +251,27 @@ class CodeViewSet(viewsets.ViewSet):
             'isSubmission': True,
             'submission_id': f"sub_{attempt.id}" if attempt else None,
         })
+
+    @action(detail=False, methods=['get'])
+    def history(self, request):
+        """Fetch submission history for a given user and problem."""
+        user_id = request.query_params.get('user_id')
+        problem_id = request.query_params.get('problem_id')
+
+        if not user_id or not problem_id:
+            return Response(
+                {'error': 'Missing required parameters: user_id, problem_id'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        problem = self._get_problem(problem_id)
+        if not problem:
+            return Response(
+                {'error': f'Problem with ID {problem_id} not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        from .serializers import AttemptSerializer
+        attempts = Attempt.objects.filter(user_id=user_id, problem=problem).order_by('-created_at')
+        serializer = AttemptSerializer(attempts, many=True)
+        return Response(serializer.data)

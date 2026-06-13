@@ -43,40 +43,23 @@ export default function ProblemDetail({ user, theme }) {
   const [consoleHeight, setConsoleHeight] = useState(250);
   const [terminalTab, setTerminalTab] = useState('result');
   const [hintRatings, setHintRatings] = useState({});
-  const [localSubmissions, setLocalSubmissions] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
   const [hoverStar, setHoverStar] = useState({});
   const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(true);
   const [customInput, setCustomInput] = useState('');
 
   useEffect(() => {
     loadProblemDetails();
-    loadLocalSubmissions();
+    loadHistory();
   }, [id]);
 
-  const loadLocalSubmissions = () => {
+  const loadHistory = async () => {
     try {
-      const stored = JSON.parse(localStorage.getItem(`submissions_${id}`) || '[]');
-      setLocalSubmissions(stored);
+      if (!user) return;
+      const data = await codeService.getHistory(user.id || 1, problem?.problem_id || problem?.id || id);
+      setSubmissions(data);
     } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const saveLocalSubmission = (codeText, status, execTime, resultData) => {
-    try {
-      const newSub = {
-        code: codeText,
-        status,
-        executionTime: execTime,
-        timestamp: new Date().toISOString(),
-        language,
-        result: resultData
-      };
-      const updated = [newSub, ...localSubmissions];
-      setLocalSubmissions(updated);
-      localStorage.setItem(`submissions_${id}`, JSON.stringify(updated));
-    } catch (e) {
-      console.error(e);
+      console.error('Failed to load history', e);
     }
   };
 
@@ -269,7 +252,7 @@ export default function ProblemDetail({ user, theme }) {
         customInput
       );
       setRunResult(result);
-      saveLocalSubmission(code, result.success ? 'success' : 'failed', result.execution_time || '0.1s', result);
+      loadHistory();
       
       if (result.success) {
         const solvedList = JSON.parse(localStorage.getItem('solvedProblems') || '[]');
@@ -325,7 +308,7 @@ export default function ProblemDetail({ user, theme }) {
         ...result,
         isSubmission: true
       });
-      saveLocalSubmission(code, result.success ? 'success' : 'failed', result.execution_time || '0.2s', result);
+      loadHistory();
       
       if (result.success) {
         const solvedList = JSON.parse(localStorage.getItem('solvedProblems') || '[]');
@@ -613,10 +596,10 @@ export default function ProblemDetail({ user, theme }) {
               }`}
             >
               History
-              {localSubmissions.length > 0 && (
-                <span className="w-5 h-5 bg-slate-800 text-slate-400 rounded-full flex items-center justify-center text-[9px] font-semibold">
-                  {localSubmissions.length}
-                </span>
+              {submissions.length > 0 && (
+                <div className="ml-1.5 flex items-center justify-center bg-[var(--bg-surface)] text-[var(--text-secondary)] text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+                  {submissions.length}
+                </div>
               )}
             </button>
           </div>
@@ -749,44 +732,67 @@ export default function ProblemDetail({ user, theme }) {
             )}
 
             {activeTab === 'submissions' && (
-              <div className="space-y-4">
-                {localSubmissions.length === 0 ? (
-                  <div className="text-center py-10 text-slate-500 text-xs font-bold uppercase tracking-wider">
-                    No run history loaded.
+              <div className="flex-1 overflow-auto p-4 md:p-6 pb-20 custom-scrollbar">
+              <div className="space-y-4 max-w-3xl mx-auto">
+                {submissions.length === 0 ? (
+                  <div className="text-center py-16 px-4 bg-[var(--bg-surface)]/30 rounded-2xl border border-[var(--border)]">
+                    <svg className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <h3 className="text-sm font-bold text-[var(--text-primary)] mb-1">No Submissions Yet</h3>
+                    <p className="text-[11px] text-[var(--text-secondary)] max-w-xs mx-auto">
+                      Your code submissions and execution history will appear here.
+                    </p>
                   </div>
                 ) : (
-                  localSubmissions.map((sub, idx) => (
-                    <div 
-                      key={idx} 
-                      className="bg-[var(--bg-surface)]/35 border border-[var(--border)] p-4 rounded-xl flex items-center justify-between gap-4 hover:border-slate-700 transition-colors"
-                    >
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2.5 h-2.5 rounded-full ${
-                            sub.status === 'success' ? 'bg-green-500 shadow-[0_0_5px_#22c55e]' : 'bg-red-500 shadow-[0_0_5px_#ef4444]'
-                          }`} />
-                          <span className="text-xs font-black uppercase tracking-wider text-slate-200">{sub.status}</span>
+                  submissions.map((sub, idx) => (
+                    <div key={sub.id || idx} className="bg-[var(--bg-surface)] border border-[var(--border)] p-4 rounded-xl shadow-sm hover:border-[var(--border-hover)] transition-colors group">
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex items-center gap-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black tracking-wide uppercase ${
+                            sub.status === 'success' ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20'
+                          }`}>
+                            {sub.status === 'success' ? 'Accepted' : 'Runtime Error'}
+                          </span>
+                          <span className="text-xs font-mono text-[var(--text-secondary)] opacity-80">
+                            {new Date(sub.created_at).toLocaleDateString()} {new Date(sub.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          </span>
                         </div>
-                        <div className="flex items-center gap-3 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                          <span>{sub.language}</span>
-                          <span>•</span>
-                          <span>{sub.executionTime}</span>
-                          <span>•</span>
-                          <span>{new Date(sub.timestamp).toLocaleTimeString()}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-base)] px-2 py-1 rounded-md border border-[var(--border)]">
+                            {sub.language}
+                          </span>
+                          <span className="text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-base)] px-2 py-1 rounded-md border border-[var(--border)] flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            {sub.execution_time || '0.0s'}
+                          </span>
                         </div>
                       </div>
-                      <button
-                        onClick={() => setCode(sub.code)}
-                        className="px-2.5 py-1 text-[9px] font-black text-slate-400 bg-[var(--bg-base)] border border-[var(--border)] rounded-lg hover:text-slate-200 hover:border-slate-700 transition-all uppercase focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
-                      >
-                        Restore
-                      </button>
+                      <div className="relative mt-2">
+                        <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                          <button
+                            onClick={() => {
+                              setCode(sub.code);
+                              setEditorCodes(prev => ({ ...prev, [sub.language]: sub.code }));
+                              setLanguage(sub.language);
+                              setActiveTab('description');
+                            }}
+                            className="bg-indigo-500 hover:bg-indigo-600 text-white p-1.5 rounded-lg shadow-lg transition-colors flex items-center gap-1.5 px-3"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+                            <span className="text-[10px] font-bold">Restore</span>
+                          </button>
+                        </div>
+                        <pre className="text-[10px] font-mono bg-[var(--bg-base)] p-3 rounded-lg text-[var(--text-primary)] overflow-x-auto max-h-32 border border-[var(--border)]/50">
+                          {sub.code}
+                        </pre>
+                      </div>
                     </div>
                   ))
                 )}
               </div>
+              </div>
             )}
-
           </div>
         </div>
 

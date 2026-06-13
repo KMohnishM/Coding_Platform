@@ -41,6 +41,16 @@ const codeService = {
       code,
       language
     });
+  },
+
+  /**
+   * Fetch submission history for a problem
+   * @param {number} userId - The user ID
+   * @param {number} problemId - The problem ID
+   * @returns {Promise<Array>} - Promise resolving to an array of attempts
+   */
+  getHistory: async (userId, problemId) => {
+    return apiClient.get(`/code/history/?user_id=${userId}&problem_id=${problemId}`);
   }
 };
 

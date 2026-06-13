@@ -45,7 +45,9 @@ class Attempt(models.Model):
     user_id = models.IntegerField(default=0)  # Added default value
     problem = models.ForeignKey(Problem, on_delete=models.CASCADE, related_name='attempts')
     code = models.TextField()
+    language = models.CharField(max_length=50, default='javascript')
     status = models.CharField(max_length=20, default='pending')
+    execution_time = models.CharField(max_length=50, null=True, blank=True)
     evaluation_details = models.JSONField(null=True, blank=True)  # Added field for storing evaluation details
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

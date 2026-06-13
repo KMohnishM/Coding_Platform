@@ -138,7 +138,7 @@ class AttemptSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = Attempt
-        fields = ['id', 'user_id', 'problem', 'code', 'status', 'created_at']
+        fields = ['id', 'user_id', 'problem', 'code', 'language', 'status', 'execution_time', 'evaluation_details', 'created_at']
 
 class HintSerializer(serializers.ModelSerializer):
     """
