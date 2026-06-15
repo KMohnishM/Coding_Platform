@@ -49,6 +49,7 @@ export default function ProblemDetail({ user, theme }) {
   const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(true);
   const [customInput, setCustomInput] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fontSize, setFontSize] = useState(() => Number(localStorage.getItem('hintcode_font_size')) || 13);
 
   useEffect(() => {
     localStorage.setItem('hintcode_split_width', leftWidth);
@@ -57,6 +58,10 @@ export default function ProblemDetail({ user, theme }) {
   useEffect(() => {
     localStorage.setItem('hintcode_console_height', consoleHeight);
   }, [consoleHeight]);
+
+  useEffect(() => {
+    localStorage.setItem('hintcode_font_size', fontSize);
+  }, [fontSize]);
 
   useEffect(() => {
     const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -280,17 +285,23 @@ export default function ProblemDetail({ user, theme }) {
     }
   };
 
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard!", { style: { fontSize: '12px' } });
+  };
+
   // Code runs
-  const runCode = async () => {
+  const runCode = useCallback(async () => {
     if (!user || !problem) return;
     setIsTerminalOpen(true);
     setTerminalTab('result');
     try {
       setLoadingRun(true);
+      setRunResult(null);
       const result = await codeService.runCode(
         user?.id || 1,
-        problem?.problem_id || problem?.id || 1,
-        code || '\n',
+        problem.problem_id || problem.id,
+        code,
         language,
         customInput
       );
@@ -333,9 +344,9 @@ export default function ProblemDetail({ user, theme }) {
     } finally {
       setLoadingRun(false);
     }
-  };
+  }, [user, problem, code, language, customInput]);
 
-  const submitSolution = async () => {
+  const submitSolution = useCallback(async () => {
     if (!user || !problem) return;
     setIsTerminalOpen(true);
     setTerminalTab('result');
@@ -390,7 +401,24 @@ export default function ProblemDetail({ user, theme }) {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [user, problem, code, language]);
+
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl+Enter or Cmd+Enter to Run Code
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          submitSolution();
+        } else {
+          runCode();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [runCode, submitSolution]);
 
   // Custom Markdown Parser with advanced example extraction
   const parseMarkdown = (md) => {
@@ -889,6 +917,19 @@ export default function ProblemDetail({ user, theme }) {
                 <option value="ruby">Ruby</option>
               </select>
 
+              {/* Font Size Slider */}
+              <div className="flex items-center gap-2 mr-2 border-r border-[var(--border)] pr-4">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest hidden lg:block">Size</span>
+                <input 
+                  type="range" 
+                  min="10" max="24" 
+                  value={fontSize} 
+                  onChange={(e) => setFontSize(Number(e.target.value))}
+                  className="w-16 h-1 bg-[var(--bg-base)] rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                  title={`Font Size: ${fontSize}px`}
+                />
+              </div>
+
               {/* Format Code button */}
               <button
                 onClick={() => monacoEditorRef.current?.formatDocument()}
@@ -992,6 +1033,7 @@ export default function ProblemDetail({ user, theme }) {
               onChange={setCode}
               language={language}
               theme={theme}
+              fontSize={fontSize}
             />
           </div>
 
@@ -1169,18 +1211,29 @@ export default function ProblemDetail({ user, theme }) {
                                 </div>
                                 
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-[10px] border-t border-[#21262d]/10">
-                                  <div>
-                                    <div className="text-[9px] text-slate-500 font-bold uppercase mb-1">Input:</div>
+                                  <div className="relative group">
+                                    <div className="flex justify-between items-center mb-1">
+                                      <div className="text-[9px] text-slate-500 font-bold uppercase">Input:</div>
+                                      <button onClick={() => copyToClipboard(tc.input)} className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-white transition-opacity"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg></button>
+                                    </div>
                                     <pre className="bg-[var(--bg-base)] border border-[var(--border)] p-2 rounded text-slate-400 overflow-x-auto leading-relaxed">{tc.input}</pre>
                                   </div>
-                                  <div>
-                                    <div className="text-[9px] text-slate-500 font-bold uppercase mb-1">Expected:</div>
-                                    <pre className="bg-[var(--bg-base)] border border-[var(--border)] p-2 rounded text-slate-400 overflow-x-auto leading-relaxed">{tc.expected}</pre>
+                                  <div className="relative group">
+                                    <div className="flex justify-between items-center mb-1">
+                                      <div className="text-[9px] text-slate-500 font-bold uppercase">Expected:</div>
+                                      <button onClick={() => copyToClipboard(tc.expected)} className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-white transition-opacity"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg></button>
+                                    </div>
+                                    <pre className={`bg-[var(--bg-base)] border p-2 rounded overflow-x-auto leading-relaxed ${
+                                      tc.passed ? 'border-[var(--border)] text-slate-400' : 'border-green-500/30 text-green-400 bg-green-500/5'
+                                    }`}>{tc.expected}</pre>
                                   </div>
-                                  <div>
-                                    <div className="text-[9px] text-slate-500 font-bold uppercase mb-1">Your Output:</div>
+                                  <div className="relative group">
+                                    <div className="flex justify-between items-center mb-1">
+                                      <div className="text-[9px] text-slate-500 font-bold uppercase">Your Output:</div>
+                                      <button onClick={() => copyToClipboard(tc.output)} className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-white transition-opacity"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg></button>
+                                    </div>
                                     <pre className={`bg-[var(--bg-base)] p-2 rounded overflow-x-auto leading-relaxed border ${
-                                      tc.passed ? 'border-[var(--border)] text-slate-200' : 'border-red-500/30 text-red-400 border-l-2 border-l-red-500'
+                                      tc.passed ? 'border-[var(--border)] text-slate-200' : 'border-red-500/30 text-red-400 bg-red-500/5'
                                     }`}>{tc.output}</pre>
                                   </div>
                                 </div>
@@ -1195,16 +1248,19 @@ export default function ProblemDetail({ user, theme }) {
                             {runResult.errors.map((err, errIdx) => (
                               <div 
                                 key={errIdx}
-                                className="bg-red-500/10 border border-red-500/20 p-3.5 rounded-xl text-red-400 flex items-start gap-2.5"
+                                className="bg-[#1e1e1e] border-l-4 border-l-red-500 border-y border-r border-[#333] p-4 rounded text-red-400 relative group overflow-hidden"
                               >
-                                <svg className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <circle cx="12" cy="12" r="10" strokeWidth={2} />
-                                  <line x1="12" y1="8" x2="12" y2="12" strokeWidth={2} />
-                                  <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth={2.5} />
-                                </svg>
-                                <div className="text-xs font-bold leading-normal">
-                                  {err.line && <span className="font-black">Line {err.line}: </span>}
-                                  <span>{err.message}</span>
+                                <button onClick={() => copyToClipboard(err.message)} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-slate-500 hover:text-white transition-opacity bg-[#2d2d2d] p-1.5 rounded-md"><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg></button>
+                                <div className="flex items-start gap-3">
+                                  <svg className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <circle cx="12" cy="12" r="10" strokeWidth={2} />
+                                    <line x1="12" y1="8" x2="12" y2="12" strokeWidth={2} />
+                                    <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth={2.5} />
+                                  </svg>
+                                  <div className="text-xs font-mono whitespace-pre-wrap leading-relaxed">
+                                    {err.line && <span className="font-black text-white">Line {err.line}: </span>}
+                                    <span className="text-red-300">{err.message}</span>
+                                  </div>
                                 </div>
                               </div>
                             ))}

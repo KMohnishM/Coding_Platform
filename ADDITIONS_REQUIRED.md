@@ -76,14 +76,14 @@
 ## 🟢 Medium Priority — Polish & UX
 
 ### 7. Frontend UI Enhancements
-- [ ] Add keyboard shortcuts (Ctrl+Enter to Run, Ctrl+Shift+Enter to Submit)
+- [x] Add keyboard shortcuts (Ctrl+Enter to Run, Ctrl+Shift+Enter to Submit)
 - [ ] Add a "Reset Code" confirmation modal
 - [ ] Add code auto-save (debounced save to localStorage per problem+language)
 - [ ] Add fullscreen mode for the editor
 - [ ] Add split-pane memory (remember left panel width + console height in localStorage)
 - [ ] Add problem navigation (Previous/Next problem arrows in workspace header)
 - [ ] Add a "Discuss" tab on the left panel
-- [ ] Loading skeleton states for problem list / topic cards (instead of spinner)
+- [x] Loading skeleton states for problem list / topic cards (instead of spinner)
 - [ ] Add toast/notification system for success/error feedback
 - [ ] Responsive mobile layout for problem detail (stacked panels)
 
@@ -93,14 +93,14 @@
 - [ ] Add sorting (by difficulty, acceptance rate, frequency)
 - [ ] Add filters (by status: solved/unsolved/attempted)
 - [ ] Add a daily challenge / problem of the day feature
-- [ ] Add difficulty-based progress rings per topic card
+- [x] Add difficulty-based progress rings per topic card
 
 ### 9. Console / Output Panel
-- [ ] Add "Custom Input" tab — let users type their own stdin
+- [x] Add "Custom Input" tab — let users type their own stdin
 - [ ] Add "Clear Console" button
-- [ ] Add colored diff for expected vs actual output
-- [ ] Add copy-to-clipboard for output
-- [ ] Syntax-highlight error messages (compilation errors)
+- [x] Add colored diff for expected vs actual output
+- [x] Add copy-to-clipboard for output
+- [x] Syntax-highlight error messages (compilation errors)
 - [ ] Show memory usage alongside runtime
 
 ### 10. Editor Improvements
@@ -108,7 +108,7 @@
 - [ ] Add code templates per language per problem (smarter boilerplate)
 - [ ] Add a "Format Code" button (auto-format)
 - [ ] Add line count and character count in the status bar
-- [ ] Add editor font size slider
+- [x] Add editor font size slider
 
 ---
 

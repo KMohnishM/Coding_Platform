@@ -146,10 +146,34 @@ export default function ProblemList() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-[var(--bg-base)]">
-        <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-indigo-500 mx-auto"></div>
-          <p className="text-[#8b949e] text-xs font-semibold tracking-widest uppercase">Loading catalog data...</p>
+      <div className="flex-1 overflow-auto bg-[var(--bg-base)] p-6">
+        <div className="max-w-7xl mx-auto space-y-6 animate-pulse">
+          {/* Header Skeleton */}
+          <div className="h-32 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)]" />
+          
+          {/* Toolbar Skeleton */}
+          <div className="flex gap-4">
+            <div className="h-10 flex-1 bg-[var(--bg-surface)] rounded-lg border border-[var(--border)]" />
+            <div className="h-10 w-32 bg-[var(--bg-surface)] rounded-lg border border-[var(--border)]" />
+            <div className="h-10 w-32 bg-[var(--bg-surface)] rounded-lg border border-[var(--border)]" />
+            <div className="h-10 w-32 bg-[var(--bg-surface)] rounded-lg border border-[var(--border)]" />
+          </div>
+
+          {/* Table Skeleton */}
+          <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl overflow-hidden">
+            <div className="h-12 border-b border-[var(--border)] bg-[#161B22]/50" />
+            {[...Array(10)].map((_, i) => (
+              <div key={i} className="h-16 border-b border-[var(--border)] flex items-center px-4 gap-4">
+                <div className="h-4 w-4 bg-[var(--border)] rounded" />
+                <div className="h-4 w-12 bg-[var(--border)] rounded" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-1/3 bg-[var(--border)] rounded" />
+                  <div className="h-3 w-1/4 bg-[var(--border)] rounded/50" />
+                </div>
+                <div className="h-6 w-20 bg-[var(--border)] rounded-full" />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );

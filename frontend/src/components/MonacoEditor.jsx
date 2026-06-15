@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
 import * as monaco from 'monaco-editor';
 
-const MonacoEditor = forwardRef(({ value, onChange, language = 'javascript', theme = 'dark', height = '100%' }, ref) => {
+const MonacoEditor = forwardRef(({ value, onChange, language = 'javascript', theme = 'dark', height = '100%', fontSize = 13 }, ref) => {
   const containerRef = useRef(null);
   const editorRef = useRef(null);
 
@@ -105,7 +105,7 @@ const MonacoEditor = forwardRef(({ value, onChange, language = 'javascript', the
       automaticLayout: true,
       minimap: { enabled: false },
       scrollBeyondLastLine: false,
-      fontSize: 13,
+      fontSize: fontSize,
       fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Menlo', 'Monaco', 'Consolas', monospace",
       fontWeight: '400',
       lineHeight: 21,
@@ -198,6 +198,12 @@ const MonacoEditor = forwardRef(({ value, onChange, language = 'javascript', the
   }, [theme]);
 
 
+  // Handle font size updates dynamically
+  useEffect(() => {
+    if (editorRef.current) {
+      editorRef.current.updateOptions({ fontSize });
+    }
+  }, [fontSize]);
 
   return <div ref={containerRef} style={{ width: '100%', height }} />;
 });

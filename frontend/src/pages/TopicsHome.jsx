@@ -76,6 +76,7 @@ export default function TopicsHome() {
   const [stats, setStats] = useState({
     solvedCount: 0, solvedEasy: 0, solvedMedium: 0, solvedHard: 0, streak: 3
   });
+  const [solvedList, setSolvedList] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => { loadProblems(); }, []);
@@ -87,8 +88,9 @@ export default function TopicsHome() {
       setProblems(data);
       setTopics([...new Set(data.map(p => p.topic).filter(Boolean))].sort());
 
-      const solvedList = JSON.parse(localStorage.getItem('solvedProblems') || '[]');
-      const solved = data.filter(p => solvedList.includes(p.problem_id) || solvedList.includes(p.id?.toString()));
+      const storedSolved = JSON.parse(localStorage.getItem('solvedProblems') || '[]');
+      setSolvedList(storedSolved);
+      const solved = data.filter(p => storedSolved.includes(p.problem_id) || storedSolved.includes(p.id?.toString()));
       setStats({
         solvedCount: solvedList.length,
         solvedEasy: solved.filter(p => p.difficulty?.toLowerCase() === 'easy').length,
@@ -105,8 +107,10 @@ export default function TopicsHome() {
 
   const getTopicStats = (topic) => {
     const tp = problems.filter(p => p.topic === topic);
+    const solvedCount = tp.filter(p => solvedList.includes(p.problem_id) || solvedList.includes(p.id?.toString())).length;
     return {
       total: tp.length,
+      solved: solvedCount,
       easy: tp.filter(p => p.difficulty?.toLowerCase() === 'easy').length,
       medium: tp.filter(p => p.difficulty?.toLowerCase() === 'medium').length,
       hard: tp.filter(p => p.difficulty?.toLowerCase() === 'hard').length,
@@ -126,10 +130,27 @@ export default function TopicsHome() {
   /* ── Loading State ── */
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-[var(--bg-base)]">
-        <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-indigo-500 mx-auto"></div>
-          <p className="text-[var(--text-secondary)] text-xs font-semibold tracking-widest uppercase">Loading dashboard...</p>
+      <div className="flex-1 overflow-auto bg-[var(--bg-base)] p-6 md:p-10">
+        <div className="max-w-7xl mx-auto space-y-12 animate-pulse">
+          {/* Header Skeleton */}
+          <div className="flex flex-col md:flex-row gap-8 items-start">
+            <div className="flex-1 space-y-4">
+              <div className="h-10 w-64 bg-[var(--bg-surface)] rounded-lg" />
+              <div className="h-4 w-96 bg-[var(--bg-surface)] rounded-lg" />
+            </div>
+            <div className="flex gap-4">
+              <div className="h-24 w-32 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)]" />
+              <div className="h-24 w-32 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)]" />
+              <div className="h-24 w-32 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)]" />
+            </div>
+          </div>
+          
+          {/* Grid Skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="h-48 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)]" />
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -283,12 +304,24 @@ export default function TopicsHome() {
               >
                 {/* Card header */}
                 <div className="flex items-center justify-between mb-5">
-                  <div className={`w-10 h-10 ${pal.iconBg} rounded-xl flex items-center justify-center border border-[var(--border)] ${pal.text} group-hover:scale-110 transition-transform duration-300`}>
-                    <TopicIcon topic={topic} />
+                  <div className="relative">
+                    <div className={`w-10 h-10 ${pal.iconBg} rounded-xl flex items-center justify-center border border-[var(--border)] ${pal.text} group-hover:scale-110 transition-transform duration-300`}>
+                      <TopicIcon topic={topic} />
+                    </div>
+                    {/* Small progress ring around the icon */}
+                    <svg className="absolute -inset-1.5 w-13 h-13 -rotate-90 pointer-events-none" viewBox="0 0 44 44">
+                      <circle cx="22" cy="22" r="20" className="stroke-[var(--bg-elevated)]" strokeWidth="2" fill="transparent" />
+                      <circle cx="22" cy="22" r="20" className="stroke-indigo-500 transition-all duration-1000" strokeWidth="2" fill="transparent"
+                        strokeDasharray={2 * Math.PI * 20}
+                        strokeDashoffset={2 * Math.PI * 20 * (1 - (ts.solved / Math.max(1, ts.total)))}
+                        strokeLinecap="round"
+                      />
+                    </svg>
                   </div>
                   <div className="text-right">
-                    <span className="text-2xl font-black text-white tracking-tight">{ts.total}</span>
-                    <span className="text-[9px] text-[var(--text-muted)] font-bold block uppercase tracking-widest">Problems</span>
+                    <span className="text-2xl font-black text-white tracking-tight">{ts.solved}</span>
+                    <span className="text-slate-500 text-lg font-bold">/{ts.total}</span>
+                    <span className="text-[9px] text-[var(--text-muted)] font-bold block uppercase tracking-widest">Solved</span>
                   </div>
                 </div>
 
