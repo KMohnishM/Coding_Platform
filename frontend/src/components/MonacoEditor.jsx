@@ -1,9 +1,9 @@
 import React, { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
+import * as monaco from 'monaco-editor';
 
 const MonacoEditor = forwardRef(({ value, onChange, language = 'javascript', theme = 'dark', height = '100%' }, ref) => {
   const containerRef = useRef(null);
   const editorRef = useRef(null);
-  const [isMonacoReady, setIsMonacoReady] = useState(typeof window !== 'undefined' && !!window.monaco);
 
   useImperativeHandle(ref, () => ({
     formatDocument: () => {
@@ -14,10 +14,10 @@ const MonacoEditor = forwardRef(({ value, onChange, language = 'javascript', the
   }));
 
   const initializeMonaco = () => {
-    if (!containerRef.current || !window.monaco || editorRef.current) return;
+    if (!containerRef.current || editorRef.current) return;
 
     // ── Define custom dark theme ──
-    window.monaco.editor.defineTheme('hintcode-dark', {
+    monaco.editor.defineTheme('hintcode-dark', {
       base: 'vs-dark',
       inherit: true,
       rules: [
@@ -65,7 +65,7 @@ const MonacoEditor = forwardRef(({ value, onChange, language = 'javascript', the
     });
 
     // ── Define custom light theme ──
-    window.monaco.editor.defineTheme('hintcode-light', {
+    monaco.editor.defineTheme('hintcode-light', {
       base: 'vs',
       inherit: true,
       rules: [
@@ -98,7 +98,7 @@ const MonacoEditor = forwardRef(({ value, onChange, language = 'javascript', the
     const activeTheme = theme === 'light' ? 'hintcode-light' : 'hintcode-dark';
 
     // Create Editor with Premium configurations
-    editorRef.current = window.monaco.editor.create(containerRef.current, {
+    editorRef.current = monaco.editor.create(containerRef.current, {
       value: value || '',
       language,
       theme: activeTheme,
@@ -122,7 +122,7 @@ const MonacoEditor = forwardRef(({ value, onChange, language = 'javascript', the
       renderLineHighlight: 'all',
       bracketPairColorization: { enabled: true },
       guides: {
-        bracketPairs: 'active',
+        bracketPairs: false,
         indentation: true,
         highlightActiveIndentation: true
       },
@@ -158,21 +158,7 @@ const MonacoEditor = forwardRef(({ value, onChange, language = 'javascript', the
   };
 
   useEffect(() => {
-    if (isMonacoReady) initializeMonaco();
-
-    if (!isMonacoReady) {
-      let tries = 0;
-      const interval = setInterval(() => {
-        if (window.monaco) {
-          setIsMonacoReady(true);
-          clearInterval(interval);
-        }
-        tries += 1;
-        if (tries > 50) clearInterval(interval);
-      }, 100);
-
-      return () => clearInterval(interval);
-    }
+    initializeMonaco();
 
     return () => {
       if (editorRef.current) {
@@ -181,7 +167,7 @@ const MonacoEditor = forwardRef(({ value, onChange, language = 'javascript', the
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMonacoReady]);
+  }, []);
 
   // Keep editor value in sync
   useEffect(() => {
@@ -195,32 +181,23 @@ const MonacoEditor = forwardRef(({ value, onChange, language = 'javascript', the
 
   // Handle language updates dynamically
   useEffect(() => {
-    if (editorRef.current && window.monaco) {
+    if (editorRef.current) {
       const model = editorRef.current.getModel();
       if (model) {
-        window.monaco.editor.setModelLanguage(model, language);
+        monaco.editor.setModelLanguage(model, language);
       }
     }
   }, [language]);
 
   // Handle theme updates dynamically
   useEffect(() => {
-    if (editorRef.current && window.monaco) {
+    if (editorRef.current) {
       const activeTheme = theme === 'light' ? 'hintcode-light' : 'hintcode-dark';
-      window.monaco.editor.setTheme(activeTheme);
+      monaco.editor.setTheme(activeTheme);
     }
   }, [theme]);
 
-  if (!isMonacoReady) {
-    return (
-      <textarea
-        value={value || ''}
-        onChange={e => onChange && onChange(e.target.value)}
-        className="w-full h-full bg-[var(--bg-base)] border border-[var(--border)] p-4 text-xs font-mono text-[var(--text-secondary)] focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-colors"
-        style={{ resize: 'none', color: 'var(--text-primary)' }}
-      />
-    );
-  }
+
 
   return <div ref={containerRef} style={{ width: '100%', height }} />;
 });

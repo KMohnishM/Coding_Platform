@@ -144,6 +144,21 @@ class HintViewSet(viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # Rate Limiting Logic: Max 3 hints per 5 minutes per problem per user
+        time_threshold = timezone.now() - timedelta(minutes=5)
+        recent_hints_count = HintDelivery.objects.filter(
+            user_id=user_id,
+            hint__problem=problem,
+            created_at__gte=time_threshold
+        ).count()
+
+        if recent_hints_count >= 3:
+            logger.warning(f"⚠️ Rate limit exceeded for user {user_id} on problem {problem_id}")
+            return Response(
+                {'error': 'Too many hint requests. Please wait 5 minutes before requesting again.'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         # Get or create user progress
         progress = self._get_user_progress(user_id, problem)
         
@@ -259,6 +274,11 @@ class HintViewSet(viewsets.ViewSet):
             attempt=attempt,
             is_auto_triggered=False
         )
+        
+        # Update UserProgress hints_requested
+        progress.hints_requested += 1
+        progress.save()
+
         logger.info(f"📝 Created hint delivery record (ID: {hint_delivery.id})")
 
         # Prepare response in the requested format

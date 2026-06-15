@@ -29,6 +29,7 @@ class UserProgress(models.Model):
     attempts_count = models.IntegerField(default=0)
     failed_attempts_count = models.IntegerField(default=0)
     current_hint_level = models.IntegerField(default=1)
+    hints_requested = models.IntegerField(default=0)
 
     def is_stuck(self):
         """Check if user is stuck based on inactivity and failed attempts"""

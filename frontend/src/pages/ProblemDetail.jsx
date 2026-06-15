@@ -253,9 +253,15 @@ export default function ProblemDetail({ user, theme }) {
       
       if (result && result.hint) {
         setHints(prev => [result.hint, ...prev]);
+        toast.success("AI Hint generated successfully!");
       }
     } catch (err) {
       console.error(err);
+      if (err?.response?.status === 429) {
+        toast.error("Too many requests! Please wait a few minutes before asking for another hint.", { duration: 4000 });
+      } else {
+        toast.error("Failed to generate hint. Please try again.");
+      }
     } finally {
       setLoadingHint(false);
     }
