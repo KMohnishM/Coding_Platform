@@ -1,9 +1,17 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
 
-export default function MonacoEditor({ value, onChange, language = 'javascript', theme = 'dark', height = '100%' }) {
+const MonacoEditor = forwardRef(({ value, onChange, language = 'javascript', theme = 'dark', height = '100%' }, ref) => {
   const containerRef = useRef(null);
   const editorRef = useRef(null);
   const [isMonacoReady, setIsMonacoReady] = useState(typeof window !== 'undefined' && !!window.monaco);
+
+  useImperativeHandle(ref, () => ({
+    formatDocument: () => {
+      if (editorRef.current) {
+        editorRef.current.getAction('editor.action.formatDocument').run();
+      }
+    }
+  }));
 
   const initializeMonaco = () => {
     if (!containerRef.current || !window.monaco || editorRef.current) return;
@@ -215,4 +223,6 @@ export default function MonacoEditor({ value, onChange, language = 'javascript',
   }
 
   return <div ref={containerRef} style={{ width: '100%', height }} />;
-}
+});
+
+export default MonacoEditor;

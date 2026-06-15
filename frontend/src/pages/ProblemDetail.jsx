@@ -33,25 +33,59 @@ export default function ProblemDetail({ user, theme }) {
   const [loadingProblem, setLoadingProblem] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('description');
-  const [leftWidth, setLeftWidth] = useState(33);
+  const [leftWidth, setLeftWidth] = useState(() => Number(localStorage.getItem('hintcode_split_width')) || 33);
   const [language, setLanguage] = useState('javascript');
   const [editorCodes, setEditorCodes] = useState({});
+  const monacoEditorRef = useRef(null);
   const [runResult, setRunResult] = useState(null);
   const [loadingRun, setLoadingRun] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
-  const [consoleHeight, setConsoleHeight] = useState(250);
+  const [consoleHeight, setConsoleHeight] = useState(() => Number(localStorage.getItem('hintcode_console_height')) || 250);
   const [terminalTab, setTerminalTab] = useState('result');
   const [hintRatings, setHintRatings] = useState({});
   const [submissions, setSubmissions] = useState([]);
   const [hoverStar, setHoverStar] = useState({});
   const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(true);
   const [customInput, setCustomInput] = useState('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('hintcode_split_width', leftWidth);
+  }, [leftWidth]);
+
+  useEffect(() => {
+    localStorage.setItem('hintcode_console_height', consoleHeight);
+  }, [consoleHeight]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => console.error(err));
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
 
   useEffect(() => {
     loadProblemDetails();
     loadHistory();
   }, [id]);
+
+  useEffect(() => {
+    if (!id || !language || !code) return;
+    const timeoutId = setTimeout(() => {
+      localStorage.setItem(`hintcode_autosave_${id}_${language}`, code);
+    }, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [code, language, id]);
 
   const loadHistory = async () => {
     try {
@@ -70,7 +104,8 @@ export default function ProblemDetail({ user, theme }) {
       setProblem(data);
       const defaultLang = data.language || 'javascript';
       setLanguage(defaultLang);
-      const initialCode = data.starting_code || getDefaultStartingCode(defaultLang, data.title);
+      const savedCode = localStorage.getItem(`hintcode_autosave_${id}_${defaultLang}`);
+      const initialCode = savedCode || data.starting_code || getDefaultStartingCode(defaultLang, data.title);
       setCode(initialCode);
       setEditorCodes({ [defaultLang]: initialCode });
       setError(null);
@@ -177,7 +212,8 @@ export default function ProblemDetail({ user, theme }) {
     if (editorCodes[newLang]) {
       setCode(editorCodes[newLang]);
     } else {
-      const template = getDefaultStartingCode(newLang, problem?.title);
+      const savedCode = localStorage.getItem(`hintcode_autosave_${id}_${newLang}`);
+      const template = savedCode || getDefaultStartingCode(newLang, problem?.title);
       setCode(template);
       setEditorCodes(prev => ({
         ...prev,
@@ -195,6 +231,7 @@ export default function ProblemDetail({ user, theme }) {
         ...prev,
         [language]: template
       }));
+      localStorage.removeItem(`hintcode_autosave_${id}_${language}`);
     }
   };
 
@@ -846,6 +883,17 @@ export default function ProblemDetail({ user, theme }) {
                 <option value="ruby">Ruby</option>
               </select>
 
+              {/* Format Code button */}
+              <button
+                onClick={() => monacoEditorRef.current?.formatDocument()}
+                className="p-1 rounded hover:bg-[#161b22] text-slate-500 hover:text-indigo-400 transition-colors focus:outline-none ml-1"
+                title="Format document"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+                </svg>
+              </button>
+
               {/* Reset Code template button */}
               <button
                 onClick={handleResetCode}
@@ -859,6 +907,19 @@ export default function ProblemDetail({ user, theme }) {
             </div>
 
             <div className="flex gap-2">
+              {/* ─── Fullscreen Button ─── */}
+              <button
+                onClick={toggleFullscreen}
+                className="group relative px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all duration-200 inline-flex items-center gap-1.5 focus:outline-none focus:ring-1 focus:ring-slate-500/30 bg-[var(--bg-surface)] hover:bg-[#161b22] text-[var(--text-secondary)] hover:text-slate-200 border border-[var(--border)] hover:border-slate-600"
+                title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+              >
+                {isFullscreen ? (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 6H5v4m10-4h4v4M9 18H5v-4m10 4h4v-4" /></svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+                )}
+              </button>
+
               {/* ─── Run Button ─── */}
               <button
                 onClick={runCode}
@@ -920,6 +981,7 @@ export default function ProblemDetail({ user, theme }) {
           {/* Monaco wrapper */}
           <div className="flex-1 min-h-0 bg-[var(--bg-base)]">
             <MonacoEditor
+              ref={monacoEditorRef}
               value={code}
               onChange={setCode}
               language={language}
