@@ -9,6 +9,13 @@ from .models import Problem, Attempt
 
 logger = logging.getLogger(__name__)
 
+# Score awarded per difficulty on a successful submission
+SCORE_MAP = {
+    'easy': 10,
+    'medium': 25,
+    'hard': 50,
+}
+
 
 class CodeViewSet(viewsets.ViewSet):
     """
@@ -19,7 +26,6 @@ class CodeViewSet(viewsets.ViewSet):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         logger.info("🚀 Initializing CodeViewSet with Piston execution engine...")
-        # Lazy import to avoid circular imports
         from .execution_service import piston_service
         self.executor = piston_service
         logger.info("✅ CodeViewSet initialized successfully")
@@ -56,13 +62,10 @@ class CodeViewSet(viewsets.ViewSet):
     def _execute_code(self, problem, code, language, custom_input=None):
         """
         Execute code using the Piston API.
-        Extracts test cases from the problem description, runs the code,
-        and compares outputs. If custom_input is provided, it runs only that.
         """
         start = time.time()
-        
+
         if custom_input is not None:
-            # ── Run the code against the custom input ──
             result = self.executor.execute(code, language, stdin=custom_input)
             elapsed = time.time() - start
 
@@ -89,7 +92,6 @@ class CodeViewSet(viewsets.ViewSet):
         test_cases = self._extract_test_cases(problem)
 
         if not test_cases:
-            # ── Run the code via Piston once with no input ──
             result = self.executor.execute(code, language)
             elapsed = time.time() - start
 
@@ -113,7 +115,6 @@ class CodeViewSet(viewsets.ViewSet):
                 'execution_time': f"{elapsed:.2f}s",
             }
 
-        # ── Run the code against each test case ──
         test_results = []
         all_passed = True
         total_elapsed = 0
@@ -121,12 +122,11 @@ class CodeViewSet(viewsets.ViewSet):
         for i, tc in enumerate(test_cases):
             tc_input = tc.get('input', '')
             tc_expected = tc.get('expected', '').strip()
-            
+
             result = self.executor.execute(code, language, stdin=tc_input)
             total_elapsed += result.get('execution_time', 0)
-            
+
             if not result['success'] and result.get('stderr'):
-                # Execution failed on this test case (e.g. Runtime Error)
                 return {
                     'success': False,
                     'results': test_results,
@@ -154,11 +154,6 @@ class CodeViewSet(viewsets.ViewSet):
         }
 
     def _extract_test_cases(self, problem):
-        """
-        Try to extract test cases from the problem.
-        First checks the serialized 'tests' property, then falls back
-        to parsing the description for Example blocks.
-        """
         try:
             from .serializers import ProblemDetailSerializer
             serializer = ProblemDetailSerializer(problem)
@@ -212,7 +207,7 @@ class CodeViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['post'])
     def submit(self, request):
-        """Submit solution — executes and records as a submission."""
+        """Submit solution — executes, records, awards score, and updates streak."""
         user_id = request.data.get('user_id')
         problem_id = request.data.get('problem_id')
         code = request.data.get('code')
@@ -241,6 +236,44 @@ class CodeViewSet(viewsets.ViewSet):
             evaluation_details=execution_result
         )
 
+        # --- Streak + Score update ---
+        from .models import DailyProblem, UserProfile
+        from datetime import timedelta
+
+        today = timezone.now().date()
+        is_potd = DailyProblem.objects.filter(problem=problem, date=today).exists()
+        score_awarded = 0
+
+        profile = UserProfile.objects.filter(user_id=user_id).first()
+
+        if profile:
+            # Award score for first successful solve of this problem
+            if execution_result['success']:
+                already_solved = Attempt.objects.filter(
+                    user_id=user_id, problem=problem
+                ).filter(status__in=['passed', 'success']).exclude(
+                    pk=attempt.pk if attempt else None
+                ).exists()
+                if not already_solved:
+                    score_awarded = SCORE_MAP.get(problem.difficulty, 0)
+                    profile.total_score += score_awarded
+                    logger.info(f"Awarded {score_awarded} pts to user {user_id} for {problem.title}")
+
+            # Streak logic on POTD attempt (any attempt counts)
+            if is_potd:
+                if profile.last_potd_attempt_date == today:
+                    pass  # already attempted today, no double count
+                elif profile.last_potd_attempt_date == today - timedelta(days=1):
+                    profile.current_streak += 1
+                    profile.last_potd_attempt_date = today
+                else:
+                    profile.current_streak = 1
+                    profile.last_potd_attempt_date = today
+
+                profile.longest_streak = max(profile.longest_streak, profile.current_streak)
+
+            profile.save()
+
         return Response({
             'success': execution_result['success'],
             'results': execution_result['results'],
@@ -250,6 +283,7 @@ class CodeViewSet(viewsets.ViewSet):
             'language': language,
             'isSubmission': True,
             'submission_id': f"sub_{attempt.id}" if attempt else None,
+            'score_awarded': score_awarded,
         })
 
     @action(detail=False, methods=['get'])
