@@ -22,12 +22,25 @@ from hints.views import HintViewSet
 from hints.problem_views import ProblemViewSet
 from hints.code_views import CodeViewSet
 from hints.auth_views import AuthViewSet
+from hints.social_views import LeaderboardViewSet, ForumPostViewSet, SolutionShareViewSet
 
 router = DefaultRouter()
 router.register(r'hints', HintViewSet, basename='hint')
 router.register(r'problems', ProblemViewSet, basename='problem')
 router.register(r'code', CodeViewSet, basename='code')
 router.register(r'auth', AuthViewSet, basename='auth')
+router.register(r'leaderboard', LeaderboardViewSet, basename='leaderboard')
+router.register(r'forums', ForumPostViewSet, basename='forum')
+router.register(r'solutions', SolutionShareViewSet, basename='solution')
+
+from hints.analytics_views import AnalyticsViewSet
+router.register(r'analytics', AnalyticsViewSet, basename='analytics')
+
+from hints.sheet_views import ProblemSheetViewSet
+router.register(r'sheets', ProblemSheetViewSet, basename='sheet')
+
+from hints.daily_views import DailyProblemViewSet
+router.register(r'daily', DailyProblemViewSet, basename='daily')
 
 def root_view(request):
     return JsonResponse({

@@ -157,3 +157,56 @@ class HintDeliverySerializer(serializers.ModelSerializer):
     class Meta:
         model = HintDelivery
         fields = ['id', 'hint', 'user_id', 'is_auto_triggered', 'feedback', 'rating', 'created_at']
+
+# --- Social Models Serializers ---
+from .models import ForumPost, ForumComment, SolutionShare
+
+class ForumCommentSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+
+    class Meta:
+        model = ForumComment
+        fields = ['id', 'post', 'user', 'username', 'content', 'upvotes', 'created_at', 'updated_at']
+        read_only_fields = ['user', 'upvotes']
+
+class ForumPostSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    comments = ForumCommentSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ForumPost
+        fields = ['id', 'user', 'username', 'problem', 'title', 'content', 'upvotes', 'comments', 'created_at', 'updated_at']
+        read_only_fields = ['user', 'upvotes']
+
+class SolutionShareSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+
+    class Meta:
+        model = SolutionShare
+        fields = ['id', 'attempt', 'user', 'username', 'problem', 'title', 'explanation', 'upvotes', 'created_at']
+        read_only_fields = ['user', 'upvotes']
+
+# --- Problem Sheet & Daily Problem Serializers ---
+from .models import ProblemSheet, SheetProblem, DailyProblem
+
+class SheetProblemSerializer(serializers.ModelSerializer):
+    problem = ProblemSerializer(read_only=True)
+    
+    class Meta:
+        model = SheetProblem
+        fields = ['id', 'problem', 'order']
+
+class ProblemSheetSerializer(serializers.ModelSerializer):
+    author_name = serializers.CharField(source='author.username', read_only=True)
+    sheet_problems = SheetProblemSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = ProblemSheet
+        fields = ['id', 'title', 'description', 'author_name', 'is_public', 'sheet_problems', 'created_at']
+
+class DailyProblemSerializer(serializers.ModelSerializer):
+    problem = ProblemDetailSerializer(read_only=True)
+    
+    class Meta:
+        model = DailyProblem
+        fields = ['id', 'date', 'problem', 'created_at']
