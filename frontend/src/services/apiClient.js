@@ -1,6 +1,12 @@
 // API client for handling requests to the backend
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000') + '/api';
 
+let globalAuthToken = null;
+
+export const setAuthToken = (token) => {
+  globalAuthToken = token;
+};
+
 /**
  * Make an API request with fetch
  * @param {string} endpoint - The API endpoint (without the base URL)
@@ -14,6 +20,10 @@ export async function apiRequest(endpoint, options = {}) {
     'Accept': 'application/json',
     ...options.headers,
   };
+
+  if (globalAuthToken) {
+    headers['Authorization'] = `Bearer ${globalAuthToken}`;
+  }
 
   // Log the request for debugging
   console.log(`Making API request to: ${API_URL}${endpoint}`);

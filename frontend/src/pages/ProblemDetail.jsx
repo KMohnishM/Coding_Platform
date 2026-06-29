@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import { toast } from 'react-hot-toast';
 import { useParams, useNavigate } from 'react-router-dom';
-import MonacoEditor from '../components/MonacoEditor';
+
+const MonacoEditor = lazy(() => import('../components/MonacoEditor'));
 import problemService from '../services/problemService';
 import hintService from '../services/hintService';
 import codeService from '../services/codeService';
@@ -50,6 +51,12 @@ export default function ProblemDetail({ user, theme }) {
   const [customInput, setCustomInput] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fontSize, setFontSize] = useState(() => Number(localStorage.getItem('hintcode_font_size')) || 13);
+  const [discussPosts, setDiscussPosts] = useState([]);
+  const [discussLoading, setDiscussLoading] = useState(false);
+  const [newPostTitle, setNewPostTitle] = useState('');
+  const [newPostContent, setNewPostContent] = useState('');
+  const [isPostingDiscuss, setIsPostingDiscuss] = useState(false);
+  const [showNewPostForm, setShowNewPostForm] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('hintcode_split_width', leftWidth);
@@ -83,6 +90,40 @@ export default function ProblemDetail({ user, theme }) {
     loadProblemDetails();
     loadHistory();
   }, [id]);
+
+  const loadDiscussPosts = async (problemDbId) => {
+    if (!problemDbId) return;
+    try {
+      setDiscussLoading(true);
+      const data = await apiClient.get(`/forums/?problem_id=${problemDbId}`);
+      setDiscussPosts(Array.isArray(data) ? data : (data.results || []));
+    } catch (e) {
+      console.error('Failed to load discuss posts', e);
+    } finally {
+      setDiscussLoading(false);
+    }
+  };
+
+  const handleSubmitDiscussPost = async () => {
+    if (!newPostTitle.trim() || !newPostContent.trim()) return;
+    try {
+      setIsPostingDiscuss(true);
+      await apiClient.post('/forums/', {
+        title: newPostTitle.trim(),
+        content: newPostContent.trim(),
+        problem_id: problem?.id,
+      });
+      setNewPostTitle('');
+      setNewPostContent('');
+      setShowNewPostForm(false);
+      loadDiscussPosts(problem?.id);
+      toast.success('Post created!');
+    } catch (e) {
+      toast.error('Failed to create post.');
+    } finally {
+      setIsPostingDiscuss(false);
+    }
+  };
 
   useEffect(() => {
     if (!id || !language || !code) return;
@@ -673,6 +714,21 @@ export default function ProblemDetail({ user, theme }) {
                 </div>
               )}
             </button>
+            <button
+              onClick={() => { setActiveTab('discuss'); if (problem?.id) loadDiscussPosts(problem.id); }}
+              className={`px-3 py-3 border-b-2 text-[10px] font-bold uppercase tracking-widest transition-all focus:outline-none flex items-center gap-1.5 ${
+                activeTab === 'discuss'
+                  ? 'border-indigo-500 text-indigo-400'
+                  : 'border-transparent text-[#8b949e] hover:text-[#f0f6fc]'
+              }`}
+            >
+              Discuss
+              {discussPosts.length > 0 && (
+                <div className="ml-1.5 flex items-center justify-center bg-[var(--bg-surface)] text-[var(--text-secondary)] text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+                  {discussPosts.length}
+                </div>
+              )}
+            </button>
           </div>
 
           {/* Scroll Content Area */}
@@ -864,6 +920,76 @@ export default function ProblemDetail({ user, theme }) {
               </div>
               </div>
             )}
+
+            {activeTab === 'discuss' && (
+              <div className="space-y-4">
+                {/* New Post Toggle */}
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-widest">Discussion</h3>
+                  <button
+                    onClick={() => setShowNewPostForm(p => !p)}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-lg transition-colors"
+                  >
+                    {showNewPostForm ? 'Cancel' : '+ New Post'}
+                  </button>
+                </div>
+
+                {showNewPostForm && (
+                  <div className="bg-[var(--bg-surface)]/60 border border-[var(--border)] rounded-xl p-4 space-y-3">
+                    <input
+                      type="text"
+                      placeholder="Post title..."
+                      value={newPostTitle}
+                      onChange={e => setNewPostTitle(e.target.value)}
+                      className="w-full bg-[var(--bg-base)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] placeholder-slate-500 focus:outline-none focus:border-indigo-500/50"
+                    />
+                    <textarea
+                      placeholder="Share your thoughts, questions, or approach..."
+                      value={newPostContent}
+                      onChange={e => setNewPostContent(e.target.value)}
+                      rows={4}
+                      className="w-full bg-[var(--bg-base)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 resize-none"
+                    />
+                    <button
+                      onClick={handleSubmitDiscussPost}
+                      disabled={isPostingDiscuss || !newPostTitle.trim() || !newPostContent.trim()}
+                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-[10px] font-bold rounded-lg transition-colors"
+                    >
+                      {isPostingDiscuss ? 'Posting...' : 'Submit Post'}
+                    </button>
+                  </div>
+                )}
+
+                {discussLoading ? (
+                  <div className="flex justify-center py-8">
+                    <div className="w-6 h-6 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
+                  </div>
+                ) : discussPosts.length === 0 ? (
+                  <div className="text-center py-10 text-[var(--text-secondary)] text-xs">
+                    <svg className="w-8 h-8 mx-auto mb-2 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    No discussions yet. Be the first to post!
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {discussPosts.map(post => (
+                      <div key={post.id} className="bg-[var(--bg-surface)]/40 border border-[var(--border)] rounded-xl p-4 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="text-xs font-bold text-[var(--text-primary)] leading-snug">{post.title}</h4>
+                          <span className="text-[9px] text-slate-500 flex-shrink-0">{post.username}</span>
+                        </div>
+                        <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed line-clamp-3">{post.content}</p>
+                        <div className="flex items-center gap-3 pt-1 text-[10px] text-slate-500">
+                          <span>👍 {post.upvotes}</span>
+                          <span>💬 {post.comments?.length || 0} replies</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1027,14 +1153,20 @@ export default function ProblemDetail({ user, theme }) {
 
           {/* Monaco wrapper */}
           <div className="flex-1 min-h-0 bg-[var(--bg-base)]">
-            <MonacoEditor
-              ref={monacoEditorRef}
-              value={code}
-              onChange={setCode}
-              language={language}
-              theme={theme}
-              fontSize={fontSize}
-            />
+            <Suspense fallback={
+              <div className="h-full w-full flex items-center justify-center text-[var(--text-muted)] bg-[var(--bg-base)]">
+                <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            }>
+              <MonacoEditor
+                ref={monacoEditorRef}
+                value={code}
+                onChange={setCode}
+                language={language}
+                theme={theme}
+                fontSize={fontSize}
+              />
+            </Suspense>
           </div>
 
           {/* Terminal / Console — draggable height */}

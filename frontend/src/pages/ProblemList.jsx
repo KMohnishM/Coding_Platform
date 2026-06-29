@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import problemService from '../services/problemService';
+import apiClient from '../services/apiClient';
 
 export default function ProblemList() {
   const [problems, setProblems] = useState([]);
@@ -13,13 +14,26 @@ export default function ProblemList() {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortField, setSortField] = useState('');
   const [sortDirection, setSortDirection] = useState('asc');
+  const [dailyProblem, setDailyProblem] = useState(null);
   const itemsPerPage = 50;
   const navigate = useNavigate();
 
   useEffect(() => {
     loadProblems();
     loadSolvedList();
+    loadDailyProblem();
   }, []);
+
+  const loadDailyProblem = async () => {
+    try {
+      const data = await apiClient.get('/daily/today/');
+      if (data && data.problem) {
+        setDailyProblem(data.problem);
+      }
+    } catch (e) {
+      console.log('No daily problem available');
+    }
+  };
 
   // Reset to first page on filter, search, status, or sorting change
   useEffect(() => {
@@ -194,12 +208,56 @@ export default function ProblemList() {
       <div className="absolute top-0 right-1/4 w-[400px] h-[300px] bg-indigo-500/5 rounded-full blur-[100px] pointer-events-none -z-10" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        {/* Problem of the Day Banner */}
+        {dailyProblem && (
+          <div className="mb-10 animate-fade-in-up">
+            <Link to={`/problems/${dailyProblem.id}`} className="block relative rounded-3xl overflow-hidden group shadow-lg">
+              <div className="absolute inset-0 bg-gradient-to-r from-orange-500/20 to-indigo-500/20 opacity-50 group-hover:opacity-100 transition-opacity"></div>
+              <div className="absolute inset-0 bg-[var(--card-bg)]/80 backdrop-blur-sm"></div>
+              <div className="relative p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-6 border border-orange-500/30 rounded-3xl group-hover:border-orange-500/60 transition-colors">
+                <div className="flex items-center gap-6 w-full sm:w-auto">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white shadow-xl shadow-orange-500/30 flex-shrink-0 group-hover:scale-110 transition-transform">
+                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-orange-500 font-black text-sm uppercase tracking-widest mb-1 flex items-center gap-2">
+                      Problem of the Day
+                      <span className="flex h-2 w-2 relative">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                      </span>
+                    </h2>
+                    <h3 className="text-2xl font-bold text-[var(--text-primary)] group-hover:text-orange-500 transition-colors">{dailyProblem.title}</h3>
+                    <div className="flex gap-3 mt-2 text-xs font-semibold">
+                      <span className={getDifficultyColor(dailyProblem.difficulty)}>
+                        {capitalizeFirst(dailyProblem.difficulty)}
+                      </span>
+                      {dailyProblem.topic && (
+                        <span className="bg-slate-500/10 text-slate-400 border border-slate-500/20 px-2.5 py-0.5 rounded-full">
+                          {dailyProblem.topic}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="w-full sm:w-auto flex-shrink-0">
+                  <button className="w-full sm:w-auto bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-orange-500/30 flex items-center justify-center gap-2 group-hover:-translate-y-1">
+                    Solve now to keep streak 🔥
+                  </button>
+                </div>
+              </div>
+            </Link>
+          </div>
+        )}
         
         {/* Header & Stats Banner */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-end mb-8">
           <div className="lg:col-span-7">
-            <h1 className="text-3xl font-black text-white tracking-tight">Problems Catalog</h1>
-            <p className="text-[#8b949e] text-xs font-bold uppercase tracking-wider mt-1">
+            <h1 className="text-3xl font-black text-[var(--text-primary)] tracking-tight">Problems Catalog</h1>
+            <p className="text-[var(--text-secondary)] text-xs font-bold uppercase tracking-wider mt-1">
               {filteredProblems.length} challenges found / {problems.length} total
             </p>
           </div>
@@ -216,11 +274,11 @@ export default function ProblemList() {
                     strokeLinecap="round"
                   />
                 </svg>
-                <span className="absolute text-[10px] font-black text-white">{totalSolved}</span>
+                <span className="absolute text-[10px] font-black text-[var(--text-primary)]">{totalSolved}</span>
               </div>
               <div className="text-left leading-tight">
                 <span className="text-[10px] text-slate-500 font-bold uppercase block tracking-wider">Solved Progress</span>
-                <span className="text-xs font-black text-slate-300">
+                <span className="text-xs font-black text-slate-400">
                   E: <span className="text-emerald-400 font-bold">{easySolved}</span> • 
                   M: <span className="text-amber-400 font-bold">{mediumSolved}</span> • 
                   H: <span className="text-red-400 font-bold">{hardSolved}</span>
