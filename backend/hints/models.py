@@ -72,7 +72,7 @@ class Problem(models.Model):
         return f"{self.id}: {self.title}"
 
 class UserProgress(models.Model):
-    user_id = models.IntegerField()
+    user_id = models.CharField(max_length=255)  # Clerk user ID (e.g. user_3FAzV5...)
     problem = models.ForeignKey(Problem, on_delete=models.CASCADE, related_name='user_progress')
     last_activity = models.DateTimeField(auto_now=True)
     attempts_count = models.IntegerField(default=0)
@@ -92,7 +92,7 @@ class UserProgress(models.Model):
         return f"Progress for user {self.user_id} on {self.problem.title}"
 
 class Attempt(models.Model):
-    user_id = models.IntegerField(default=0)  # Added default value
+    user_id = models.CharField(max_length=255, default='')  # Clerk user ID
     problem = models.ForeignKey(Problem, on_delete=models.CASCADE, related_name='attempts')
     code = models.TextField()
     language = models.CharField(max_length=50, default='javascript')
@@ -125,7 +125,7 @@ class Hint(models.Model):
 
 class HintDelivery(models.Model):
     hint = models.ForeignKey(Hint, on_delete=models.CASCADE, related_name='deliveries')
-    user_id = models.IntegerField(default=0)  # Added default value
+    user_id = models.CharField(max_length=255, default='')  # Clerk user ID
     attempt = models.ForeignKey(Attempt, on_delete=models.CASCADE, related_name='hint_deliveries')
     is_auto_triggered = models.BooleanField(default=False)
     feedback = models.TextField(null=True, blank=True)
